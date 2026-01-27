@@ -28,19 +28,27 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
 
     public ScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, boolean fullSiteMap, boolean subHosts){
         this.api = api;
-        this.requestResponse = requestResponse.getFirst();
+        this.requestResponse = requestResponse.get(0);
         this.fullSiteMap = fullSiteMap;
         this.subHosts = subHosts;
     }
 
     @Override
     protected Void doInBackground() {
-        scan();
+        try {
+            scan();
+        } catch (Throwable e) {
+            api.logging().logToOutput("[ScanWorker] ERROR: Scan failed - " + e.getClass().getName() + ": " + e.getMessage());
+            java.io.StringWriter sw = new java.io.StringWriter();
+            e.printStackTrace(new java.io.PrintWriter(sw));
+            api.logging().logToError(sw.toString());
+        }
         return null;
     }
 
     public HashMap<String, Server> getServers(){
         HashMap<String, Server> servers = new HashMap<>();
+        api.logging().logToOutput("[ScanWorker] Discovering servers for host: " + requestResponse.httpService().host() + " (fullSiteMap=" + fullSiteMap + ")");
         sendHTTP1Request(Server.addRequestCacheBuster(this.requestResponse.request()));
         String host = requestResponse.httpService().host();
         if (fullSiteMap){
@@ -50,11 +58,11 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
                 if (!testReqResp.hasResponse() || testReqResp.response().statusCode() == 0) continue;
                 String serverHash = Server.getNetworkHash(testReqResp);
                 if (servers.containsKey(serverHash)){
-                    if (!(servers.get(serverHash).containsRequest(testReqResp.request()))) servers.get(serverHash).addRequestResponse(testReqResp);
+                    if (!(servers.get(serverHash).containsRequest(reqResp.request()))) servers.get(serverHash).addRequestResponse(reqResp);
                 }
                 else{
                     servers.put(serverHash, new Server(serverHash, api));
-                    servers.get(serverHash).addRequestResponse(testReqResp);
+                    servers.get(serverHash).addRequestResponse(reqResp);
                 }
             }
         }
@@ -63,7 +71,7 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
             if (testReqResp.hasResponse() && testReqResp.response().statusCode() != 0) {
                 String serverHash = Server.getNetworkHash(testReqResp);
                 servers.put(serverHash, new Server(serverHash, api));
-                servers.get(serverHash).addRequestResponse(testReqResp);
+                servers.get(serverHash).addRequestResponse(this.requestResponse);
             }
         }
         return servers;

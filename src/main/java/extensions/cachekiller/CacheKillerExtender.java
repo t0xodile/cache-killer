@@ -11,6 +11,8 @@ public class CacheKillerExtender implements BurpExtension {
     public void initialize(MontoyaApi api) {
         api.extension().setName("CacheKiller");
         Server.setApi(api);
-        api.userInterface().registerContextMenuItemsProvider((new CacheKiller(api)));
+        CacheKiller cacheKiller = new CacheKiller(api);
+        api.userInterface().registerContextMenuItemsProvider(cacheKiller);
+        api.extension().registerUnloadingHandler(cacheKiller::onUnload);
     }
 }

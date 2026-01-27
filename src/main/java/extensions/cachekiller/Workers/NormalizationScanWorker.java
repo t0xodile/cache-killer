@@ -30,9 +30,16 @@ public class NormalizationScanWorker extends ScanWorker {
     }
 
     public void scan(){
+        api.logging().logToOutput("[NormalizationScan] Scan started");
         HashMap<String, Server> servers = getServers();
+        api.logging().logToOutput("[NormalizationScan] Found " + servers.size() + " server group(s) to test");
+        if (servers.isEmpty()) {
+            api.logging().logToOutput("[NormalizationScan] No servers found. Ensure the selected request returns a valid response.");
+            return;
+        }
         HttpRequestResponse reportReq;
         for (Server serv : servers.values()){
+            api.logging().logToOutput("[NormalizationScan] Detecting origin normalization...");
             reportReq = serv.detectOriginNormalization();
             if (serv.getOriginNormalization() != null) {
                 boolean[] normalizations = serv.getOriginNormalization();
@@ -67,7 +74,7 @@ public class NormalizationScanWorker extends ScanWorker {
                     sb.append("Encoded dot-segment normalized: ").append(normalizations[ENCODED_SEGMENT] ? "YES - /a/..%2Fb == /b" : "NO").append("<br>");
                     sb.append("Encoded backslash dot-segment normalized: ").append(normalizations[ENCODED_BACK_SEGMENT] ? "YES - /a/..%5Cb == /b" : "NO").append("<br>");
                     sb.append("Path is URL decoded: ").append(normalizations[PATH_DECODING] ? "YES - /%68%65%6c%6c%6f == /hello" : "NO").append("<br>");
-                    sb.append("Path is URL decoded: ").append(normalizations[IS_QUERY_KEYED] ? "YES - key(/hello?abc) == key(/hello)" : "NO").append("<br>");
+                    sb.append("Query string is part of cache key: ").append(normalizations[IS_QUERY_KEYED] ? "NO - key(/hello?abc) == key(/hello)" : "YES").append("<br>");
                     sb.append("<br>The following paths appear to share the same network components and should be affected:<br>").append(serv.requestsToString());
                     reportIssue(reportReq, "Key Normalization Detected", sb.toString(), AuditIssueSeverity.INFORMATION);
                 }

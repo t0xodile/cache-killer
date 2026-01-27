@@ -21,8 +21,8 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     public static final List<Character> BROWSER_ENCODED = new ArrayList<>(Arrays.asList('"', '^', '{', '}', '`','|','<','>','#','?','\\'));
 
 
-    public CacheDeceptionScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, List<String> testDelimitersList, boolean subHosts, List<String> extensions, List<String> staticDirs){
-        super(api, requestResponse, true, subHosts);
+    public CacheDeceptionScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, List<String> testDelimitersList, boolean fullSiteMap, boolean subHosts, List<String> extensions, List<String> staticDirs){
+        super(api, requestResponse, fullSiteMap, subHosts);
         this.extensions = new ArrayList<>(extensions);
         if (staticDirs == null) this.staticDirs = null;
         else this.staticDirs = new ArrayList<>(staticDirs);
@@ -30,12 +30,26 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     }
 
     public void scan(){
+        api.logging().logToOutput("[CacheDeceptionScan] Scan started");
         HashMap<String, Server> servers = getServers();
+        api.logging().logToOutput("[CacheDeceptionScan] Found " + servers.size() + " server group(s) to test");
+        if (servers.isEmpty()) {
+            api.logging().logToOutput("[CacheDeceptionScan] No servers found. Ensure the selected request returns a valid response.");
+            return;
+        }
         for (Server serv : servers.values()){
+            api.logging().logToOutput("[CacheDeceptionScan] Detecting origin delimiters...");
             serv.detectOriginDelimiters(testDelimitersList);
+            api.logging().logToOutput("[CacheDeceptionScan] Detecting key delimiters...");
             serv.detectKeyDelimiters(testDelimitersList);
+            api.logging().logToOutput("[CacheDeceptionScan] Detecting origin normalization...");
             serv.detectOriginNormalization();
+            api.logging().logToOutput("[CacheDeceptionScan] Detecting key normalization...");
             serv.detectKeyNormalization();
+            if (serv.getOriginDelimiters() == null || serv.getKeyDelimiters() == null || serv.getOriginNormalization() == null || serv.getKeyNormalization() == null) {
+                api.logging().logToOutput("[CacheDeceptionScan] Skipping server: insufficient detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");
+                continue;
+            }
             List<String> discrepancyOriginDelimiters = new ArrayList<>();
             for (String delim : serv.getOriginDelimiters()){
                 if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim)) discrepancyOriginDelimiters.add(delim);
@@ -188,13 +202,15 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             testGet = sendHTTP1Request(testGet.request());
             if (testGet.hasResponse() && hasCacheHit(testGet.response())) done = true;
         }
-        while (!(testGet.hasResponse() && testGet.response().statusCode() != 0)){
+        int retries = 0;
+        while (!(testGet.hasResponse() && testGet.response().statusCode() != 0) && retries < 5){
             try {
                 TimeUnit.SECONDS.sleep(2);
             } catch (InterruptedException ignored) {
             }
             testGet = sendHTTP1Request(testGet.request());
             if (testGet.hasResponse() && hasCacheHit(testGet.response())) done = true;
+            retries++;
         }
         return done;
     }
@@ -229,10 +245,10 @@ public class CacheDeceptionScanWorker extends ScanWorker {
         Map<String, String> h1, h2;
         h1 = getCacheHeaders(r1.response());
         h2 = getCacheHeaders(r2.response());
+        if (h1.size() != h2.size()) return false;
         for (String name : h1.keySet()){
             if (!h2.containsKey(name)) return false;
             if (!h1.get(name).equals(h2.get(name))) return false;
-            h2.remove(name);
         }
         return true;
     }
@@ -267,7 +283,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
         List<String> out = new ArrayList<>();
         for (String path : server.getStaticRequestURLs()){
             ArrayList<String> segments = Server.splitPathSegments(path);
-            if (!segments.isEmpty()) out.add(segments.getFirst());
+            if (!segments.isEmpty()) out.add(segments.get(0));
         }
         return out;
     }

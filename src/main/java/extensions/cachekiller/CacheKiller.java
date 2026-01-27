@@ -18,6 +18,8 @@ import extensions.cachekiller.Workers.CachePoisoningScanWorker;
 import extensions.cachekiller.Workers.DelimiterScanWorker;
 import extensions.cachekiller.Workers.NormalizationScanWorker;
 
+import extensions.cachekiller.Workers.ScanWorker;
+
 import javax.swing.*;
 import java.awt.*;
 import java.io.File;
@@ -27,6 +29,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class CacheKiller implements ContextMenuItemsProvider {
 
@@ -36,6 +39,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
     private List<String> extensionsList;
     private List<String> staticDirectories;
     private static HashMap<String, Server> servers;
+    private final List<ScanWorker> activeWorkers = new CopyOnWriteArrayList<>();
 
     public CacheKiller(MontoyaApi api) {
         this.api = api;
@@ -45,10 +49,23 @@ public class CacheKiller implements ContextMenuItemsProvider {
         if (servers == null) servers = new HashMap<>();
     }
 
+    public void onUnload() {
+        for (ScanWorker worker : activeWorkers) {
+            worker.cancel(true);
+        }
+        activeWorkers.clear();
+    }
+
     @Override
     public List<Component> provideMenuItems(ContextMenuEvent event) {
         List<Component> menuItems = new ArrayList<>();
-        List<HttpRequestResponse> requestResponse = event.selectedRequestResponses();
+        List<HttpRequestResponse> requestResponse = new ArrayList<>(event.selectedRequestResponses());
+        if (requestResponse.isEmpty() && event.messageEditorRequestResponse().isPresent()) {
+            requestResponse.add(event.messageEditorRequestResponse().get().requestResponse());
+        }
+        if (requestResponse.isEmpty()) {
+            return menuItems;
+        }
         JMenuItem delimiterItem = new JMenuItem("Delimiters finder");
         JMenuItem normalizationItem = new JMenuItem("Normalization prove");
         JMenuItem cacheDecetionItem = new JMenuItem("Web Cache Deception scan");
@@ -67,7 +84,6 @@ public class CacheKiller implements ContextMenuItemsProvider {
     private void showDelimiterDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
         dialog.setTitle("Delimiters Finder");
-        dialog.setSize(500, 400);
         dialog.setLayout(new BorderLayout());
 
         JPanel mainPanel = new JPanel();
@@ -85,7 +101,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         selectFromFileButton.setActionCommand("SELECT_FROM_FILE");
         JTextField filenameField = new JTextField("filename", 10);
         JButton fileButton = new JButton("...");
-        fileButton.addActionListener(e -> importFile(filenameField));
+        fileButton.addActionListener(e -> importFile(filenameField, testDelimitersList));
         JPanel selectFromFilePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         selectFromFilePanel.add(selectFromFileButton);
         selectFromFilePanel.add(filenameField);
@@ -166,7 +182,14 @@ public class CacheKiller implements ContextMenuItemsProvider {
             api.logging().logToOutput("fullSite: "+fullSitemapScanCheckbox.isSelected());
             api.logging().logToOutput("subHost: "+detectSubHostDelimitersCheckbox.isSelected());
             api.logging().logToOutput("keys: "+detectKeyDelimitersCheckbox.isSelected());
-            new DelimiterScanWorker(api, requestResponse, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), detectKeyDelimitersCheckbox.isSelected()).execute();
+            try {
+                ScanWorker worker = new DelimiterScanWorker(api, requestResponse, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), detectKeyDelimitersCheckbox.isSelected());
+                activeWorkers.add(worker);
+                worker.execute();
+                api.logging().logToOutput("Delimiter scan worker launched.");
+            } catch (Throwable t) {
+                api.logging().logToOutput("ERROR: Failed to start delimiter scan - " + t.getClass().getName() + ": " + t.getMessage());
+            }
             dialog.dispose();
         });
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
@@ -174,6 +197,8 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
         dialog.add(mainPanel, BorderLayout.CENTER);
         dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(400, dialog.getPreferredSize().height));
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
@@ -181,8 +206,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
     private void showCacheDeceptionDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
-        dialog.setTitle("Delimiters Finder");
-        dialog.setSize(500, 400);
+        dialog.setTitle("Web Cache Deception Scan");
         dialog.setLayout(new BorderLayout());
 
         JPanel mainPanel = new JPanel();
@@ -200,7 +224,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         selectFromFileButton.setActionCommand("SELECT_FROM_FILE");
         JTextField filenameField = new JTextField("filename", 10);
         JButton fileButton = new JButton("...");
-        fileButton.addActionListener(e -> importFile(filenameField));
+        fileButton.addActionListener(e -> importFile(filenameField, testDelimitersList));
         JPanel selectFromFilePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         selectFromFilePanel.add(selectFromFileButton);
         selectFromFilePanel.add(filenameField);
@@ -231,7 +255,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         JPanel extensionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JLabel extensionLabel = new JLabel("Static Extension List");
         extensionLabel.setFont(new Font("Arial", Font.BOLD, 12));
-        extensionPanel.add(payloadLabel);
+        extensionPanel.add(extensionLabel);
         mainPanel.add(extensionPanel);
 
         // Select from File Option
@@ -239,7 +263,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         fileExtensionButton.setActionCommand("SELECT_FROM_FILE");
         JTextField fileExtensionField = new JTextField("filename", 10);
         JButton filesButton = new JButton("...");
-        filesButton.addActionListener(e -> importFile(fileExtensionField));
+        filesButton.addActionListener(e -> importFile(fileExtensionField, extensionsList));
         JPanel fileExtensionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         fileExtensionPanel.add(fileExtensionButton);
         fileExtensionPanel.add(fileExtensionField);
@@ -278,7 +302,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         staticDirButton.setActionCommand("SELECT_FROM_FILE");
         JTextField staticDirField = new JTextField("filename", 10);
         JButton filesDirButton = new JButton("...");
-        filesDirButton.addActionListener(e -> importFile(staticDirField));
+        filesDirButton.addActionListener(e -> importFile(staticDirField, staticDirectories));
         JPanel staticDirFilePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         staticDirFilePanel.add(staticDirButton);
         staticDirFilePanel.add(staticDirField);
@@ -290,7 +314,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         staticDirListButton.setActionCommand("BASE_LIST");
         JPanel staticDirListPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         staticDirListPanel.add(staticDirListButton);
-        mainPanel.add(staticDirPanel);
+        mainPanel.add(staticDirListPanel);
 
         // ASCII with Encoded Extended Option
         JRadioButton detectButton = new JRadioButton("Detect static directories (slow)");
@@ -379,22 +403,29 @@ public class CacheKiller implements ContextMenuItemsProvider {
                     if (staticDirectories == null) staticDirectories= new ArrayList<>();
                     break;
                 case "BASE_LIST":
-                    extensionsList = new ArrayList<>();
-                    extensionsList.add("/static");
-                    extensionsList.add("/resources");
-                    extensionsList.add("/shared");
-                    extensionsList.add("/public");
-                    extensionsList.add("/assets");
-                    extensionsList.add("/wp-content");
-                    extensionsList.add("/media");
+                    staticDirectories = new ArrayList<>();
+                    staticDirectories.add("/static");
+                    staticDirectories.add("/resources");
+                    staticDirectories.add("/shared");
+                    staticDirectories.add("/public");
+                    staticDirectories.add("/assets");
+                    staticDirectories.add("/wp-content");
+                    staticDirectories.add("/media");
                     break;
                 case "DETECT":
-                    extensionsList = null;
+                    staticDirectories = null;
                     break;
                 default:
-                    extensionsList = new ArrayList<>();
+                    staticDirectories = new ArrayList<>();
             }
-            new CacheDeceptionScanWorker(api, requestResponse, testDelimitersList, detectSubHostDelimitersCheckbox.isSelected(), extensionsList, null).execute();
+            try {
+                ScanWorker worker = new CacheDeceptionScanWorker(api, requestResponse, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), extensionsList, staticDirectories);
+                activeWorkers.add(worker);
+                worker.execute();
+                api.logging().logToOutput("Cache deception scan worker launched.");
+            } catch (Throwable t) {
+                api.logging().logToOutput("ERROR: Failed to start cache deception scan - " + t.getClass().getName() + ": " + t.getMessage());
+            }
             dialog.dispose();
         });
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
@@ -402,6 +433,8 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
         dialog.add(mainPanel, BorderLayout.CENTER);
         dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(400, dialog.getPreferredSize().height));
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
@@ -410,8 +443,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
     private void showCachePoisoningDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
-        dialog.setTitle("Delimiters Finder");
-        dialog.setSize(500, 400);
+        dialog.setTitle("Web Cache Poisoning Scan");
         dialog.setLayout(new BorderLayout());
 
         JPanel mainPanel = new JPanel();
@@ -429,7 +461,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         selectFromFileButton.setActionCommand("SELECT_FROM_FILE");
         JTextField filenameField = new JTextField("filename", 10);
         JButton fileButton = new JButton("...");
-        fileButton.addActionListener(e -> importFile(filenameField));
+        fileButton.addActionListener(e -> importFile(filenameField, testDelimitersList));
         JPanel selectFromFilePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         selectFromFilePanel.add(selectFromFileButton);
         selectFromFilePanel.add(filenameField);
@@ -500,7 +532,14 @@ public class CacheKiller implements ContextMenuItemsProvider {
                 default:
                     testDelimitersList = new ArrayList<>();
             }
-            new CachePoisoningScanWorker(api, requestResponse, testDelimitersList, detectSubHostDelimitersCheckbox.isSelected()).execute();
+            try {
+                ScanWorker worker = new CachePoisoningScanWorker(api, requestResponse, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected());
+                activeWorkers.add(worker);
+                worker.execute();
+                api.logging().logToOutput("Cache poisoning scan worker launched.");
+            } catch (Throwable t) {
+                api.logging().logToOutput("ERROR: Failed to start cache poisoning scan - " + t.getClass().getName() + ": " + t.getMessage());
+            }
             dialog.dispose();
         });
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
@@ -508,6 +547,8 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
         dialog.add(mainPanel, BorderLayout.CENTER);
         dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(400, dialog.getPreferredSize().height));
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
@@ -517,8 +558,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
     private void showNormalizationDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
-        dialog.setTitle("Normalization Prove");
-        dialog.setSize(500, 400);
+        dialog.setTitle("Normalization Probe");
         dialog.setLayout(new BorderLayout());
 
         JPanel mainPanel = new JPanel();
@@ -553,7 +593,14 @@ public class CacheKiller implements ContextMenuItemsProvider {
         // Start Button
         JButton startButton = new JButton("Start");
         startButton.addActionListener(e -> {
-            new NormalizationScanWorker(api, requestResponse, fullSitemapScanCheckbox.isSelected(), detectSubHostNormalizationCheckbox.isSelected(), detectKeyNormalizationCheckbox.isSelected()).execute();
+            try {
+                ScanWorker worker = new NormalizationScanWorker(api, requestResponse, fullSitemapScanCheckbox.isSelected(), detectSubHostNormalizationCheckbox.isSelected(), detectKeyNormalizationCheckbox.isSelected());
+                activeWorkers.add(worker);
+                worker.execute();
+                api.logging().logToOutput("Normalization scan worker launched.");
+            } catch (Throwable t) {
+                api.logging().logToOutput("ERROR: Failed to start normalization scan - " + t.getClass().getName() + ": " + t.getMessage());
+            }
             dialog.dispose();
         });
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
@@ -561,12 +608,14 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
         dialog.add(mainPanel, BorderLayout.CENTER);
         dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(400, dialog.getPreferredSize().height));
         dialog.setLocationRelativeTo(null);
         dialog.setVisible(true);
     }
 
 
-    private void importFile(JTextField filenameField) {
+    private void importFile(JTextField filenameField, List<String> targetList) {
         JFileChooser fileChooser = new JFileChooser();
         int returnValue = fileChooser.showOpenDialog(null);
         if (returnValue == JFileChooser.APPROVE_OPTION) {
@@ -574,9 +623,9 @@ public class CacheKiller implements ContextMenuItemsProvider {
             filenameField.setText(selectedFile.getName());
             try {
                 List<String> lines = Files.readAllLines(selectedFile.toPath(), StandardCharsets.UTF_8);
-                testDelimitersList.clear();
+                targetList.clear();
                 for (String line : lines) {
-                    testDelimitersList.add(new String(line.getBytes(StandardCharsets.UTF_8), StandardCharsets.US_ASCII));
+                    targetList.add(new String(line.getBytes(StandardCharsets.UTF_8), StandardCharsets.US_ASCII));
                 }
                 JOptionPane.showMessageDialog(null, "File imported successfully.");
             } catch (IOException ex) {

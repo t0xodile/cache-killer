@@ -340,6 +340,7 @@ public class Server {
     }
 
     public static int getCacheHits(HttpRequestResponse reqResp){
+        if (!reqResp.hasResponse()) return 0;
         int cacheHeader = 0;
         for (HttpHeader hdr : reqResp.response().headers()){
             String name = hdr.name().toLowerCase();
@@ -347,7 +348,12 @@ public class Server {
             if (name.contains("cache") || name.contains("server-timing")){
                 cacheHeader+= countOccurrences(value, "hit");
             }
-            if (name.equals("age") && Integer.parseInt(value)>0) cacheHeader++;
+            if (name.equals("age")) {
+                try {
+                    if (Integer.parseInt(value) > 0) cacheHeader++;
+                } catch (NumberFormatException ignored) {
+                }
+            }
         }
         return cacheHeader;
     }
@@ -502,7 +508,12 @@ public class Server {
 
 
     public static String randomNonce(int length){
-        return String.format("%09d", new Random().nextInt(1000000000));
+        StringBuilder sb = new StringBuilder();
+        Random random = new Random();
+        for (int i = 0; i < length; i++) {
+            sb.append(random.nextInt(10));
+        }
+        return sb.toString();
     }
 
     public static String pathWithoutQuery(String base){
