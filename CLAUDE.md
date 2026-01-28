@@ -4,7 +4,7 @@ This ia a burp extension that is was used during the research found at https://p
 
 ## Architecture
 
-- **Main Entry Point**: `src/main/java/burp/BurpExtender.java` - implements `BurpExtension` interface
+- **Main Entry Point**: `src/main/java/extensions/cachekiller/CacheKillerExtender.java` - implements `BurpExtension` interface
 - **Build System**: Gradle with Kotlin DSL, Java 21 compatibility
 - **Dependencies**: Montoya API 2025.12 (compile-only), no runtime dependencies
 - **Extension Pattern**: Single-class extension that initializes through `initialize(MontoyaApi montoyaApi)` method
@@ -21,7 +21,7 @@ The built JAR file will be in `build/libs/` and can be loaded directly into Burp
 
 ## Extension Loading in Burp
 
-1. Build the JAR using `./gradlew jar`
+1. Build the JAR using `./gradlew build`
 2. In Burp: Extensions > Installed > Add > Select the JAR file
 3. For quick reloading during development: Ctrl/⌘ + click the Loaded checkbox
 
@@ -34,4 +34,4 @@ The built JAR file will be in `build/libs/` and can be loaded directly into Burp
 
 ## Current State
 
-Functionality not quite working as intended. 
+Functional 
