@@ -81,7 +81,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
         return menuItems;
     }
 
-    private void showDelimiterDialog(List<HttpRequestResponse> requestResponse) {
+    void showDelimiterDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
         dialog.setTitle("Delimiters Finder");
         dialog.setLayout(new BorderLayout());
@@ -204,7 +204,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
     }
 
 
-    private void showCacheDeceptionDialog(List<HttpRequestResponse> requestResponse) {
+    void showCacheDeceptionDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
         dialog.setTitle("Web Cache Deception Scan");
         dialog.setLayout(new BorderLayout());
@@ -441,7 +441,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
 
 
-    private void showCachePoisoningDialog(List<HttpRequestResponse> requestResponse) {
+    void showCachePoisoningDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
         dialog.setTitle("Web Cache Poisoning Scan");
         dialog.setLayout(new BorderLayout());
@@ -556,7 +556,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
 
 
 
-    private void showNormalizationDialog(List<HttpRequestResponse> requestResponse) {
+    void showNormalizationDialog(List<HttpRequestResponse> requestResponse) {
         JDialog dialog = new JDialog();
         dialog.setTitle("Normalization Probe");
         dialog.setLayout(new BorderLayout());
