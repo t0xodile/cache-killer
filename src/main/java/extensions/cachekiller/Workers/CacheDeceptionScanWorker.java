@@ -46,19 +46,23 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             serv.detectOriginNormalization();
             api.logging().logToOutput("[CacheDeceptionScan] Detecting key normalization...");
             serv.detectKeyNormalization();
-            if (serv.getOriginDelimiters() == null || serv.getKeyDelimiters() == null || serv.getOriginNormalization() == null || serv.getKeyNormalization() == null) {
-                api.logging().logToOutput("[CacheDeceptionScan] Skipping server: insufficient detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");
+            if (serv.getOriginDelimiters() == null && serv.getKeyDelimiters() == null && serv.getOriginNormalization() == null && serv.getKeyNormalization() == null) {
+                api.logging().logToOutput("[CacheDeceptionScan] Skipping server: no detection results.");
                 continue;
             }
-            List<String> discrepancyOriginDelimiters = new ArrayList<>();
-            for (String delim : serv.getOriginDelimiters()){
-                if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim)) discrepancyOriginDelimiters.add(delim);
-            }
-            List<HttpRequestResponse> vulnerableExtension;
-            for (String delim : discrepancyOriginDelimiters){
-                vulnerableExtension = testExtensionRule(serv, delim, this.extensions);
-                for (HttpRequestResponse vuln : vulnerableExtension){
-                    reportIssue(vuln, "Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '"+ScanWorker.printableStr(delim)+"' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.", AuditIssueSeverity.HIGH);
+            api.logging().logToOutput("[CacheDeceptionScan] Detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");
+            if (serv.getOriginDelimiters() != null && serv.getKeyDelimiters() != null) {
+                List<String> discrepancyOriginDelimiters = new ArrayList<>();
+                for (String delim : serv.getOriginDelimiters()) {
+                    if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim))
+                        discrepancyOriginDelimiters.add(delim);
+                }
+                List<HttpRequestResponse> vulnerableExtension;
+                for (String delim : discrepancyOriginDelimiters) {
+                    vulnerableExtension = testExtensionRule(serv, delim, this.extensions);
+                    for (HttpRequestResponse vuln : vulnerableExtension) {
+                        reportIssue(vuln, "Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '" + ScanWorker.printableStr(delim) + "' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.", AuditIssueSeverity.HIGH);
+                    }
                 }
             }
             if (this.staticDirs == null) this.staticDirs = new ArrayList<>(detectStaticDirectories(serv));
@@ -67,8 +71,9 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             this.staticDirs.add("/favicon.ico");
             this.staticDirs.add("/index.html");
             this.staticDirs.add("/home");
+            this.staticDirs.add("/resources");
 
-            if (serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && !serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
+            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && !serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {
@@ -87,7 +92,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 }
             }
 
-            if (serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && !serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
+            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && !serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {
@@ -106,7 +111,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 }
             }
 
-            if (!serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
+            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getOriginDelimiters() != null && !serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {
@@ -128,7 +133,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 }
             }
 
-            if (!serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
+            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getOriginDelimiters() != null && !serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {
@@ -160,7 +165,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             HttpRequestResponse testReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter+(delimiter.equals(".") ? ".": "")+"aaaaa"));
             if (testReq.hasResponse() && testReq.response().statusCode() != 0 && compareResp(testReq.response(), reqResp.response())) {
                 for (String ext : extensions) {
-                    testReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "." : "") + ext));
+                    testReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "" : ".") + ext));
                     boolean cached = triggerCache(testReq.request());
                     testReq = sendHTTP1Request(testReq.request());
                     if (cached || !containSameCacheHeaders(testReq, reqResp)) {
