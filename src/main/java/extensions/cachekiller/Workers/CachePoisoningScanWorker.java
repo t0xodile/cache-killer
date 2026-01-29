@@ -57,7 +57,7 @@ public class CachePoisoningScanWorker extends ScanWorker {
                         sendHTTP1Request(setPathSuffix(reqResp.request(), delim+"/../"+random));
                         HttpRequestResponse testResp = sendHTTP1Request(reqResp.request().withPath(Server.removeLastSegment(reqResp.request().path())+"/"+random));
                         if (compareResp(testResp.response(), reqResp.response())){
-                            reportIssue(testResp, "Web Cache Poisoning Detected", "The target appears to be normalizing the cache keys and its vulnerable to Web Cache Poisoning using the origin delimiter: '"+ScanWorker.printableStr(delim)+"'.", AuditIssueSeverity.HIGH);
+                            reportIssue("Web Cache Poisoning Detected", "The target appears to be normalizing the cache keys and its vulnerable to Web Cache Poisoning using the origin delimiter: '"+ScanWorker.printableStr(delim)+"'.", AuditIssueSeverity.HIGH, testResp);
                         }
                     }
                 }
@@ -71,7 +71,7 @@ public class CachePoisoningScanWorker extends ScanWorker {
                         sendHTTP1Request(reqResp.request().withPath("/"+random+delim+"/.."+reqResp.request().path()));
                         HttpRequestResponse testResp = sendHTTP1Request(reqResp.request().withPath("/"+random));
                         if (compareResp(testResp.response(), reqResp.response())){
-                            reportIssue(testResp, "Web Cache Poisoning Detected", "The target appears to be normalizing the path at the origin and its vulnerable to Web Cache Poisoning using the key delimiter: '"+ScanWorker.printableStr(delim)+"'.", AuditIssueSeverity.HIGH);
+                            reportIssue("Web Cache Poisoning Detected", "The target appears to be normalizing the path at the origin and its vulnerable to Web Cache Poisoning using the key delimiter: '"+ScanWorker.printableStr(delim)+"'.", AuditIssueSeverity.HIGH, testResp);
                         }
                     }
                 }
