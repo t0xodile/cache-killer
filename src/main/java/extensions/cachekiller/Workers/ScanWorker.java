@@ -77,18 +77,18 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
         return servers;
     }
 
-    public void reportIssue(HttpRequestResponse requestResponse, String title, String description, AuditIssueSeverity severity) {
+    public void reportIssue(String title, String description, AuditIssueSeverity severity, HttpRequestResponse... requestResponses) {
         AuditIssue issue = auditIssue(
                 title,
                 description,
                 null,
-                requestResponse.request().url(),
+                requestResponses[0].request().url(),
                 severity,
                 AuditIssueConfidence.CERTAIN,
                 null,
                 null,
                 AuditIssueSeverity.INFORMATION,
-                requestResponse
+                requestResponses
         );
         api.siteMap().add(issue);
     }
