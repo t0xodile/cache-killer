@@ -383,14 +383,57 @@ public class CacheKiller implements ContextMenuItemsProvider {
                     extensionsList.add("js");
                     extensionsList.add("ico");
                     extensionsList.add("exe");
-                    break;
-                case "EXTENDED_LIST":
-                    extensionsList = new ArrayList<>();
-                    extensionsList.add("js");
-                    extensionsList.add("ico");
-                    extensionsList.add("exe");
                     extensionsList.add("css");
                     extensionsList.add("png");
+                    break;
+                case "EXTENDED_LIST":
+                    // Pulled from seclists Discovery/Web-Content/web-extensions.txt
+                    extensionsList = new ArrayList<>();
+                    extensionsList.add("ico");
+                    extensionsList.add("png");
+                    extensionsList.add("asp");
+                    extensionsList.add("aspx");
+                    extensionsList.add("bat");
+                    extensionsList.add("c");
+                    extensionsList.add("cfm");
+                    extensionsList.add("cgi");
+                    extensionsList.add("css");
+                    extensionsList.add("com");
+                    extensionsList.add("dll");
+                    extensionsList.add("exe");
+                    extensionsList.add("hta");
+                    extensionsList.add("htm");
+                    extensionsList.add("html");
+                    extensionsList.add("inc");
+                    extensionsList.add("jhtml");
+                    extensionsList.add("js");
+                    extensionsList.add("jsa");
+                    extensionsList.add("json");
+                    extensionsList.add("jsp");
+                    extensionsList.add("log");
+                    extensionsList.add("mdb");
+                    extensionsList.add("nsf");
+                    extensionsList.add("pcap");
+                    extensionsList.add("php");
+                    extensionsList.add("php2");
+                    extensionsList.add("php3");
+                    extensionsList.add("php4");
+                    extensionsList.add("php5");
+                    extensionsList.add("php6");
+                    extensionsList.add("php7");
+                    extensionsList.add("phps");
+                    extensionsList.add("pht");
+                    extensionsList.add("phtml");
+                    extensionsList.add("pl");
+                    extensionsList.add("phar");
+                    extensionsList.add("rb");
+                    extensionsList.add("reg");
+                    extensionsList.add("sh");
+                    extensionsList.add("shtml");
+                    extensionsList.add("sql");
+                    extensionsList.add("swf");
+                    extensionsList.add("txt");
+                    extensionsList.add("xml");
                     break;
                 default:
                     extensionsList = new ArrayList<>();
@@ -411,6 +454,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
                     staticDirectories.add("/assets");
                     staticDirectories.add("/wp-content");
                     staticDirectories.add("/media");
+                    staticDirectories.add("images");
                     break;
                 case "DETECT":
                     staticDirectories = null;
