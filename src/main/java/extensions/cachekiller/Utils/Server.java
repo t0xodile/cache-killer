@@ -332,6 +332,9 @@ public class Server {
     public static int isCachedResponse(HttpRequestResponse reqResp){
         int cacheCount = getCacheHits(reqResp);
         HttpRequestResponse testReqResp = sendHTTP1Request(reqResp.request());
+        if (cacheCount == 0 && getCacheHits(testReqResp) == 0) {
+            testReqResp = sendHTTP1Request(reqResp.request());
+        }
         while (cacheCount < getCacheHits(testReqResp)){
             cacheCount = getCacheHits(testReqResp);
             testReqResp = sendHTTP1Request(testReqResp.request());
