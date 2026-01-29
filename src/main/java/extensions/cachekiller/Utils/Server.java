@@ -21,6 +21,7 @@ public class Server {
     public static final List<String> BAD_CHARS = new ArrayList<>(Arrays.asList(""+(char)0x00, "%00", ""+(char)0x7F, "#", "\tabc", "%xx", " abcd", "?<>", "/a/b/c/d/e/../../../../../f" ,"\r", "\n"));
     public static final List<String> SERVER_KEYWORDS = new ArrayList<>(Arrays.asList("cloudflare", "cloudfront", "azure", "nginx", "apache", "microsoft", "google", "fastly", "imperva", "akamai", "java", "puma", "x-amz"));
     public static final List<String> STATIC_EXTENSIONS  = new ArrayList<>(Arrays.asList("7Z",  "CSV",  "GIF",  "MIDI",  "PNG",  "TIF",  "ZIP", "AVI",  "DOC",  "GZ",  "MKV",  "PPT",  "TIFF",  "ZST", "AVIF",  "DOCX",  "ICO",  "MP3",  "PPTX",  "TTF",  "APK",  "DMG",  "ISO",  "MP4",  "PS",  "WEBM",  "BIN",  "EJS",  "JAR",  "OGG",  "RAR",  "WEBP",  "BMP",  "EOT",  "JPG",  "OTF",  "SVG",  "WOFF",  "BZ2",  "EPS",  "JPEG",  "PDF",  "SVGZ",  "WOFF2",  "CLASS",  "EXE",  "JS",  "PICT",  "SWF",  "XLS",  "CSS",  "FLAC",  "MID",  "PLS",  "TAR",  "XLSX"));
+    public static final List<String> FALLBACK_STATIC_PATHS = List.of("/robots.txt", "/favicon.ico", "/index.html", "/home", "/resources");
 
     public static final int SINGLE_DOT = 0;
     public static final int DOT_SEGMENT = 1;
@@ -164,13 +165,28 @@ public class Server {
                 return reqResp;
             }
         }
+        // Fallback: try well-known static paths when no static requests are available
+        if (this.keyDelimiters == null) {
+            HttpRequest sourceReq = !this.staticReqs.isEmpty() ? this.staticReqs.get(0).request() : !this.dynamicReqs.isEmpty() ? this.dynamicReqs.get(0).request() : null;
+            if (sourceReq != null) {
+                for (String path : FALLBACK_STATIC_PATHS) {
+                    HttpRequestResponse fallbackResp = sendHTTP1Request(sourceReq.withPath(path));
+                    if (fallbackResp.hasResponse() && fallbackResp.response().statusCode() > 0 && fallbackResp.response().statusCode() < 400) {
+                        List<String> keyDelimiters = detectKeyDelimiters(fallbackResp, delimiters);
+                        if (keyDelimiters != null) {
+                            this.keyDelimiters = keyDelimiters;
+                            return fallbackResp;
+                        }
+                    }
+                }
+            }
+        }
         return null;
     }
 
     public static boolean[] detectOriginNormalization(HttpRequest request){
-        //to detect the different normalization behaviours and obtain consistent results, the base request MUST at least contain a path with multi directory levels: /dir1/file
-
-        if (request.pathWithoutQuery().length()<=1 || !stripSlash(request.pathWithoutQuery().substring(1)).contains("/")) return null;
+        if (request.pathWithoutQuery().length()<=1) return null;
+        boolean multiSegment = stripSlash(request.pathWithoutQuery().substring(1)).contains("/");
         boolean[] out = new boolean[10];
         HttpRequestResponse testReqResp;
         HttpRequestResponse baseReqResp = sendHTTP1Request(request);
@@ -191,14 +207,16 @@ public class Server {
         testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("///"+request.path())));
         out[MULTI_SLASH] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 5);
 
-        testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("/"+request.path().substring(1).replace("/", "\\"))));
-        out[BACK_SLASH] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 5);
+        if (multiSegment) {
+            testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("/"+request.path().substring(1).replace("/", "\\"))));
+            out[BACK_SLASH] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 5);
 
-        testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("/"+request.path().substring(1).replace("/", "%2f"))));
-        out[ENCODED_SLASH] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 5);
+            testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("/"+request.path().substring(1).replace("/", "%2f"))));
+            out[ENCODED_SLASH] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 5);
 
-        testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("/"+request.path().substring(1).replace("/", "%5c"))));
-        out[ENCODED_BACKSLASH] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 5);
+            testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("/"+request.path().substring(1).replace("/", "%5c"))));
+            out[ENCODED_BACKSLASH] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 5);
+        }
 
         testReqResp = sendHTTP1Request(addCacheBuster(request.withPath("/aaa%2f.."+request.path())));
         out[ENCODED_SEGMENT] = (testReqResp.hasResponse() && baseReqResp.response().statusCode() == testReqResp.response().statusCode() && Math.abs(baseReqResp.response().body().length() - testReqResp.response().body().length()) < 15);
@@ -227,7 +245,7 @@ public class Server {
                 return reqResp;
             }
         }
-        api.logging().logToOutput("Cannot detect Origin Normalization. Try with another request or add more endpoints to the sitemap. To detect Origin Normalization, a request with multi-segment URL is required.");
+        api.logging().logToOutput("Cannot detect Origin Normalization. Try with another request or add more endpoints to the sitemap.");
         return null;
     }
 
@@ -237,9 +255,8 @@ public class Server {
 
     public static boolean[] detectKeyNormalization(HttpRequest request){
         //A cached request/response MUST be used in this function
-        //to detect the different normalization behaviours and obtain consistent results, the base request MUST at least contain a path with multi directory levels: /dir1/file
-
-        if (request.pathWithoutQuery().length()<=1 || !stripSlash(request.pathWithoutQuery().substring(1)).contains("/")) return null;
+        if (request.pathWithoutQuery().length()<=1) return null;
+        boolean multiSegment = stripSlash(request.pathWithoutQuery().substring(1)).contains("/");
         boolean[] out = new boolean[11];
         HttpRequestResponse testReqResp;
         HttpRequestResponse baseReqResp = sendHTTP1Request(request);
@@ -260,14 +277,16 @@ public class Server {
         testReqResp = sendHTTP1Request(request.withPath("///"+request.path()));
         out[MULTI_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
-        testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "\\")));
-        out[BACK_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
+        if (multiSegment) {
+            testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "\\")));
+            out[BACK_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
-        testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "%2f")));
-        out[ENCODED_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
+            testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "%2f")));
+            out[ENCODED_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
-        testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "%5c")));
-        out[ENCODED_BACKSLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
+            testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "%5c")));
+            out[ENCODED_BACKSLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
+        }
 
         testReqResp = sendHTTP1Request(request.withPath("/aaa%2f.."+request.path()));
         out[ENCODED_SEGMENT] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
@@ -293,7 +312,24 @@ public class Server {
                 return reqResp;
             }
         }
-        api.logging().logToOutput("Cannot detect Key Normalization. Try with another request or add more endpoints to the sitemap. To detect Key Normalization, a cacheable request with multi-segment URL is required.");
+        // Fallback: try well-known static paths when no static requests produced results
+        if (this.keyNormalization == null) {
+            HttpRequest sourceReq = !this.staticReqs.isEmpty() ? this.staticReqs.get(0).request() : !this.dynamicReqs.isEmpty() ? this.dynamicReqs.get(0).request() : null;
+            if (sourceReq != null) {
+                for (String path : FALLBACK_STATIC_PATHS) {
+                    HttpRequestResponse fallbackResp = sendHTTP1Request(sourceReq.withPath(path));
+                    if (fallbackResp.hasResponse() && fallbackResp.response().statusCode() > 0 && fallbackResp.response().statusCode() < 400) {
+                        sendHTTP1Request(fallbackResp.request());
+                        boolean[] keyNormalization = detectKeyNormalization(fallbackResp.request());
+                        if (keyNormalization != null) {
+                            this.keyNormalization = keyNormalization;
+                            return fallbackResp;
+                        }
+                    }
+                }
+            }
+        }
+        api.logging().logToOutput("Cannot detect Key Normalization. Try with another request or add more endpoints to the sitemap.");
         return null;
     }
 

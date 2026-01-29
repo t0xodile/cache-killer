@@ -51,29 +51,83 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 continue;
             }
             api.logging().logToOutput("[CacheDeceptionScan] Detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");
+
+            //Delimiter Scan
             if (serv.getOriginDelimiters() != null && serv.getKeyDelimiters() != null) {
                 List<String> discrepancyOriginDelimiters = new ArrayList<>();
                 for (String delim : serv.getOriginDelimiters()) {
                     if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim))
                         discrepancyOriginDelimiters.add(delim);
                 }
-                List<HttpRequestResponse> vulnerableExtension;
+                List<HttpRequestResponse[]> vulnerableExtension;
                 for (String delim : discrepancyOriginDelimiters) {
                     vulnerableExtension = testExtensionRule(serv, delim, this.extensions);
-                    for (HttpRequestResponse vuln : vulnerableExtension) {
-                        reportIssue(vuln, "Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '" + ScanWorker.printableStr(delim) + "' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.", AuditIssueSeverity.HIGH);
+                    for (HttpRequestResponse[] vuln : vulnerableExtension) {
+                        reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '" + ScanWorker.printableStr(delim) + "' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.", AuditIssueSeverity.HIGH, vuln[0], vuln[1]);
                     }
                 }
             }
-            if (this.staticDirs == null) this.staticDirs = new ArrayList<>(detectStaticDirectories(serv));
+            if (this.staticDirs == null) {
+                this.staticDirs = new ArrayList<>(detectStaticDirectories(serv));
+            }
+            for (String fallback : List.of("/robots.txt", "/favicon.ico", "/index.html", "/home", "/resources")) {
+                if (!this.staticDirs.contains(fallback)) {
+                    this.staticDirs.add(fallback);
+                }
+            }
 
-            this.staticDirs.add("/robots.txt");
-            this.staticDirs.add("/favicon.ico");
-            this.staticDirs.add("/index.html");
-            this.staticDirs.add("/home");
-            this.staticDirs.add("/resources");
+            //Cache key normalization scan
+            if (serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginDelimiters() != null){
+                for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
+                    if (reqResp.request().pathWithoutQuery().length()<2) continue;
+                    for (String delimiter : serv.getOriginDelimiters()) {
+                        if (!isSentByBrowser(delimiter)) continue;
+                        for (String dir : this.staticDirs) {
+                            StringBuilder sb = new StringBuilder();
+                            sb.append(reqResp.request().pathWithoutQuery());
+                            sb.append(delimiter);
+                            sb.append("%2F");
+                            for (String s : Server.splitPathSegments(reqResp.request().pathWithoutQuery())) {
+                                sb.append("..%2F");
+                            }
+                            sb.append(dir.startsWith("/") ? dir.substring(1) : dir);
+                            HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
+                            HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
+                            if (cachedResp != null){
+                                reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Key Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                            }
+                        }
+                    }
+                }
+            }
 
-            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && !serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
+            //Cache key normalization scan (backslash)
+            if (serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && serv.getOriginDelimiters() != null){
+                for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
+                    if (reqResp.request().pathWithoutQuery().length()<2) continue;
+                    for (String delimiter : serv.getOriginDelimiters()) {
+                        if (!isSentByBrowser(delimiter)) continue;
+                        for (String dir : this.staticDirs) {
+                            StringBuilder sb = new StringBuilder();
+                            sb.append(reqResp.request().pathWithoutQuery());
+                            sb.append(delimiter);
+                            sb.append("%5C");
+                            for (String s : Server.splitPathSegments(reqResp.request().pathWithoutQuery())) {
+                                sb.append("..%5C");
+                            }
+                            sb.append(dir.startsWith("/") ? dir.substring(1) : dir);
+                            HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
+                            HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
+                            if (cachedResp != null){
+                                reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Key Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                            }
+                        }
+                    }
+                }
+            }
+
+            //Origin normalizaiton scan
+            if (serv.getOriginNormalization() != null && serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {
@@ -85,14 +139,16 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                         }
                         sb.append(reqResp.request().path().substring(1));
                         HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
-                        if (detectCacheDeception(testReq, reqResp)){
-                            reportIssue(testReq, "Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Rule Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH);
+                        HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
+                        if (cachedResp != null){
+                            reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Origin Server Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
                         }
                     }
                 }
             }
 
-            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && !serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
+            //Origin normalization Scan
+            if (serv.getOriginNormalization() != null && serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {
@@ -104,52 +160,9 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                         }
                         sb.append(reqResp.request().path().substring(1));
                         HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
-                        if (detectCacheDeception(testReq, reqResp)){
-                            reportIssue(testReq, "Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Rule Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH);
-                        }
-                    }
-                }
-            }
-
-            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getOriginDelimiters() != null && !serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
-                for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
-                    if (reqResp.request().pathWithoutQuery().length()<2) continue;
-                    for (String dir : this.staticDirs) {
-                        for (String delimiter : serv.getOriginDelimiters()) {
-                            StringBuilder sb = new StringBuilder();
-                            sb.append(reqResp.request().pathWithoutQuery());
-                            if (!reqResp.request().pathWithoutQuery().endsWith("/")) sb.append("/");
-                            sb.append(delimiter);
-                            for (String s : Server.splitPathSegments(reqResp.request().pathWithoutQuery())) {
-                                sb.append("%2E%2E%2F");
-                            }
-                            sb.append(dir.substring(1));
-                            HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
-                            if (detectCacheDeception(testReq, reqResp)) {
-                                reportIssue(testReq, "Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Origin Server Normalization.<br>The path : '" + dir + "' appears to be a Static Directory.<br>The Origin Delimiter used is: "+delimiter, AuditIssueSeverity.HIGH);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (serv.getKeyNormalization() != null && serv.getOriginNormalization() != null && serv.getOriginDelimiters() != null && !serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
-                for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
-                    if (reqResp.request().pathWithoutQuery().length()<2) continue;
-                    for (String dir : this.staticDirs) {
-                        for (String delimiter : serv.getOriginDelimiters()) {
-                            StringBuilder sb = new StringBuilder();
-                            sb.append(reqResp.request().pathWithoutQuery());
-                            if (!reqResp.request().pathWithoutQuery().endsWith("/")) sb.append("/");
-                            sb.append(delimiter);
-                            for (String s : Server.splitPathSegments(reqResp.request().pathWithoutQuery())) {
-                                sb.append("%2E%2E%5C");
-                            }
-                            sb.append(dir.substring(1));
-                            HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
-                            if (detectCacheDeception(testReq, reqResp)) {
-                                reportIssue(testReq, "Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Origin Server Backslash Normalization.<br>The path : '" + dir + "' appears to be a Static Directory.<br>The Origin Delimiter used is: "+delimiter, AuditIssueSeverity.HIGH);
-                            }
+                        HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
+                        if (cachedResp != null){
+                            reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Origin Server Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
                         }
                     }
                 }
@@ -159,17 +172,17 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     }
 
 
-    public List<HttpRequestResponse> testExtensionRule(Server server, String delimiter, List<String> extensions){
-        List<HttpRequestResponse> out = new ArrayList<>();
+    public List<HttpRequestResponse[]> testExtensionRule(Server server, String delimiter, List<String> extensions){
+        List<HttpRequestResponse[]> out = new ArrayList<>();
         for (HttpRequestResponse reqResp : server.getDynamicRequest()) {
             HttpRequestResponse testReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter+(delimiter.equals(".") ? ".": "")+"aaaaa"));
             if (testReq.hasResponse() && testReq.response().statusCode() != 0 && compareResp(testReq.response(), reqResp.response())) {
                 for (String ext : extensions) {
-                    testReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "" : ".") + ext));
-                    boolean cached = triggerCache(testReq.request());
-                    testReq = sendHTTP1Request(testReq.request());
-                    if (cached || !containSameCacheHeaders(testReq, reqResp)) {
-                        out.add(testReq);
+                    HttpRequestResponse initialReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "" : ".") + ext));
+                    boolean cached = triggerCache(initialReq.request());
+                    HttpRequestResponse cachedReq = sendHTTP1Request(initialReq.request());
+                    if (cached || !containSameCacheHeaders(cachedReq, reqResp)) {
+                        out.add(new HttpRequestResponse[]{initialReq, cachedReq});
                     }
                 }
             }
@@ -177,13 +190,15 @@ public class CacheDeceptionScanWorker extends ScanWorker {
         return out;
     }
 
-    public boolean detectCacheDeception(HttpRequestResponse testReq, HttpRequestResponse baseReqResp){
+    public HttpRequestResponse detectCacheDeception(HttpRequestResponse testReq, HttpRequestResponse baseReqResp){
         if (testReq.hasResponse() && testReq.response().statusCode() != 0 && compareResp(testReq.response(), baseReqResp.response())) {
             boolean cached = triggerCache(testReq.request());
-            testReq = sendHTTP1Request(testReq.request());
-            return cached || !containSameCacheHeaders(testReq, baseReqResp);
+            HttpRequestResponse cachedResp = sendHTTP1Request(testReq.request());
+            if (cached || !containSameCacheHeaders(cachedResp, baseReqResp)) {
+                return cachedResp;
+            }
         }
-        return false;
+        return null;
     }
 
 
@@ -285,10 +300,14 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     }
 
     public List<String> detectStaticDirectories(Server server){
+        Set<String> seen = new HashSet<>();
         List<String> out = new ArrayList<>();
         for (String path : server.getStaticRequestURLs()){
             ArrayList<String> segments = Server.splitPathSegments(path);
-            if (!segments.isEmpty()) out.add(segments.get(0));
+            if (!segments.isEmpty()) {
+                String dir = "/" + segments.get(0);
+                if (seen.add(dir)) out.add(dir);
+            }
         }
         return out;
     }
