@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import static burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue;
+import static extensions.cachekiller.Utils.Server.isCachedResponse;
 import static extensions.cachekiller.Utils.Server.sendHTTP1Request;
 
 public abstract class ScanWorker extends SwingWorker<Void, Void> {
@@ -72,6 +73,16 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
                 String serverHash = Server.getNetworkHash(testReqResp);
                 servers.put(serverHash, new Server(serverHash, api));
                 servers.get(serverHash).addRequestResponse(this.requestResponse);
+
+                //Add common static cacheable paths
+                for (String path : Server.FALLBACK_STATIC_PATHS) {
+                    HttpRequestResponse fallbackResp = sendHTTP1Request(this.requestResponse.request().withPath(path));
+                    if (fallbackResp.hasResponse() && fallbackResp.response().statusCode() > 0) {
+                        if (isCachedResponse(fallbackResp) != 0) {
+                            servers.get(serverHash).addStaticRequest(fallbackResp);
+                        }
+                    }
+                }
             }
         }
         return servers;

@@ -165,22 +165,6 @@ public class Server {
                 return reqResp;
             }
         }
-        // Fallback: try well-known static paths when no static requests are available
-        if (this.keyDelimiters == null) {
-            HttpRequest sourceReq = !this.staticReqs.isEmpty() ? this.staticReqs.get(0).request() : !this.dynamicReqs.isEmpty() ? this.dynamicReqs.get(0).request() : null;
-            if (sourceReq != null) {
-                for (String path : FALLBACK_STATIC_PATHS) {
-                    HttpRequestResponse fallbackResp = sendHTTP1Request(sourceReq.withPath(path));
-                    if (fallbackResp.hasResponse() && fallbackResp.response().statusCode() > 0 && fallbackResp.response().statusCode() < 400) {
-                        List<String> keyDelimiters = detectKeyDelimiters(fallbackResp, delimiters);
-                        if (keyDelimiters != null) {
-                            this.keyDelimiters = keyDelimiters;
-                            return fallbackResp;
-                        }
-                    }
-                }
-            }
-        }
         return null;
     }
 
@@ -310,23 +294,6 @@ public class Server {
             if (keyNormalization != null) {
                 this.keyNormalization = keyNormalization;
                 return reqResp;
-            }
-        }
-        // Fallback: try well-known static paths when no static requests produced results
-        if (this.keyNormalization == null) {
-            HttpRequest sourceReq = !this.staticReqs.isEmpty() ? this.staticReqs.get(0).request() : !this.dynamicReqs.isEmpty() ? this.dynamicReqs.get(0).request() : null;
-            if (sourceReq != null) {
-                for (String path : FALLBACK_STATIC_PATHS) {
-                    HttpRequestResponse fallbackResp = sendHTTP1Request(sourceReq.withPath(path));
-                    if (fallbackResp.hasResponse() && fallbackResp.response().statusCode() > 0 && fallbackResp.response().statusCode() < 400) {
-                        sendHTTP1Request(fallbackResp.request());
-                        boolean[] keyNormalization = detectKeyNormalization(fallbackResp.request());
-                        if (keyNormalization != null) {
-                            this.keyNormalization = keyNormalization;
-                            return fallbackResp;
-                        }
-                    }
-                }
             }
         }
         api.logging().logToOutput("Cannot detect Key Normalization. Try with another request or add more endpoints to the sitemap.");
