@@ -1,13 +1,12 @@
 # CLAUDE.md
 
-This ia a burp extension that is was used during the research found at https://portswigger.net/research/gotta-cache-em-all.
+This ia a burp extension that was used during the research found at https://portswigger.net/research/gotta-cache-em-all.
 
 ## Architecture
 
 - **Main Entry Point**: `src/main/java/extensions/cachekiller/CacheKillerExtender.java` - implements `BurpExtension` interface
 - **Build System**: Gradle with Kotlin DSL, Java 21 compatibility
 - **Dependencies**: Montoya API 2025.12 (compile-only), no runtime dependencies
-- **Extension Pattern**: Single-class extension that initializes through `initialize(MontoyaApi montoyaApi)` method
 
 ## Key Development Commands
 
