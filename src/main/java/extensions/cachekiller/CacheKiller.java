@@ -26,10 +26,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CacheKiller implements ContextMenuItemsProvider {
 
@@ -183,10 +183,8 @@ public class CacheKiller implements ContextMenuItemsProvider {
             api.logging().logToOutput("subHost: "+detectSubHostDelimitersCheckbox.isSelected());
             api.logging().logToOutput("keys: "+detectKeyDelimitersCheckbox.isSelected());
             try {
-                ScanWorker worker = new DelimiterScanWorker(api, requestResponse, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), detectKeyDelimitersCheckbox.isSelected());
-                activeWorkers.add(worker);
-                worker.execute();
-                api.logging().logToOutput("Delimiter scan worker launched.");
+                launchBulkScan(requestResponse, "DelimiterScan", hostRequests ->
+                        new DelimiterScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), detectKeyDelimitersCheckbox.isSelected()));
             } catch (Throwable t) {
                 api.logging().logToOutput("ERROR: Failed to start delimiter scan - " + t.getClass().getName() + ": " + t.getMessage());
             }
@@ -463,10 +461,8 @@ public class CacheKiller implements ContextMenuItemsProvider {
                     staticDirectories = new ArrayList<>();
             }
             try {
-                ScanWorker worker = new CacheDeceptionScanWorker(api, requestResponse, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), extensionsList, staticDirectories);
-                activeWorkers.add(worker);
-                worker.execute();
-                api.logging().logToOutput("Cache deception scan worker launched.");
+                launchBulkScan(requestResponse, "CacheDeceptionScan", hostRequests ->
+                        new CacheDeceptionScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), extensionsList, staticDirectories));
             } catch (Throwable t) {
                 api.logging().logToOutput("ERROR: Failed to start cache deception scan - " + t.getClass().getName() + ": " + t.getMessage());
             }
@@ -577,10 +573,8 @@ public class CacheKiller implements ContextMenuItemsProvider {
                     testDelimitersList = new ArrayList<>();
             }
             try {
-                ScanWorker worker = new CachePoisoningScanWorker(api, requestResponse, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected());
-                activeWorkers.add(worker);
-                worker.execute();
-                api.logging().logToOutput("Cache poisoning scan worker launched.");
+                launchBulkScan(requestResponse, "CachePoisoningScan", hostRequests ->
+                        new CachePoisoningScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected()));
             } catch (Throwable t) {
                 api.logging().logToOutput("ERROR: Failed to start cache poisoning scan - " + t.getClass().getName() + ": " + t.getMessage());
             }
@@ -638,10 +632,8 @@ public class CacheKiller implements ContextMenuItemsProvider {
         JButton startButton = new JButton("Start");
         startButton.addActionListener(e -> {
             try {
-                ScanWorker worker = new NormalizationScanWorker(api, requestResponse, fullSitemapScanCheckbox.isSelected(), detectSubHostNormalizationCheckbox.isSelected(), detectKeyNormalizationCheckbox.isSelected());
-                activeWorkers.add(worker);
-                worker.execute();
-                api.logging().logToOutput("Normalization scan worker launched.");
+                launchBulkScan(requestResponse, "NormalizationScan", hostRequests ->
+                        new NormalizationScanWorker(api, hostRequests, fullSitemapScanCheckbox.isSelected(), detectSubHostNormalizationCheckbox.isSelected(), detectKeyNormalizationCheckbox.isSelected()));
             } catch (Throwable t) {
                 api.logging().logToOutput("ERROR: Failed to start normalization scan - " + t.getClass().getName() + ": " + t.getMessage());
             }
@@ -658,6 +650,44 @@ public class CacheKiller implements ContextMenuItemsProvider {
         dialog.setVisible(true);
     }
 
+
+    @FunctionalInterface
+    private interface WorkerFactory {
+        ScanWorker create(List<HttpRequestResponse> hostRequests);
+    }
+
+    private void launchBulkScan(List<HttpRequestResponse> requestResponse, String scanType, WorkerFactory factory) {
+        // Group requests by host
+        Map<String, List<HttpRequestResponse>> hostGroups = new LinkedHashMap<>();
+        for (HttpRequestResponse rr : requestResponse) {
+            hostGroups.computeIfAbsent(rr.httpService().host(), k -> new ArrayList<>()).add(rr);
+        }
+
+        int totalHosts = hostGroups.size();
+        int totalRequests = requestResponse.size();
+        api.logging().logToOutput("[CacheKiller] Starting bulk scan: " + totalHosts + " host(s), " + totalRequests + " total request(s)");
+
+        AtomicInteger completedCount = new AtomicInteger(0);
+
+        for (Map.Entry<String, List<HttpRequestResponse>> entry : hostGroups.entrySet()) {
+            String host = entry.getKey();
+            List<HttpRequestResponse> hostRequests = entry.getValue();
+
+            ScanWorker worker = factory.create(hostRequests);
+            worker.setOnComplete(() -> {
+                activeWorkers.remove(worker);
+                int done = completedCount.incrementAndGet();
+                int remaining = totalHosts - done;
+                api.logging().logToOutput("[CacheKiller] Scan completed for " + host + " (" + done + "/" + totalHosts + " hosts done, " + remaining + " remaining)");
+                if (done == totalHosts) {
+                    api.logging().logToOutput("[CacheKiller] All scans complete.");
+                }
+            });
+            activeWorkers.add(worker);
+            api.logging().logToOutput("[CacheKiller] Queued " + scanType + " for " + host + " (" + hostRequests.size() + " requests)");
+            worker.execute();
+        }
+    }
 
     private void importFile(JTextField filenameField, List<String> targetList) {
         JFileChooser fileChooser = new JFileChooser();

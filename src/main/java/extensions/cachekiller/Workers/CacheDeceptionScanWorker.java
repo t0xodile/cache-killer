@@ -39,22 +39,25 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             return;
         }
         for (Server serv : servers.values()){
-            api.logging().logToOutput("[CacheDeceptionScan] Detecting origin delimiters...");
+            String host = serv.getDynamicRequest().get(0).httpService().host();
+            checkCancelled();
+            //api.logging().logToOutput("[CacheDeceptionScan] Detecting origin delimiters...");
             serv.detectOriginDelimiters(testDelimitersList);
-            api.logging().logToOutput("[CacheDeceptionScan] Detecting key delimiters...");
+            //api.logging().logToOutput("[CacheDeceptionScan] Detecting key delimiters...");
             serv.detectKeyDelimiters(testDelimitersList);
-            api.logging().logToOutput("[CacheDeceptionScan] Detecting origin normalization...");
+            //api.logging().logToOutput("[CacheDeceptionScan] Detecting origin normalization...");
             serv.detectOriginNormalization();
-            api.logging().logToOutput("[CacheDeceptionScan] Detecting key normalization...");
+            //api.logging().logToOutput("[CacheDeceptionScan] Detecting key normalization...");
             serv.detectKeyNormalization();
             if (serv.getOriginDelimiters() == null && serv.getKeyDelimiters() == null && serv.getOriginNormalization() == null && serv.getKeyNormalization() == null) {
-                api.logging().logToOutput("[CacheDeceptionScan] Skipping server: no detection results.");
+                api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Skipping server: no detection results.");
                 continue;
             }
-            api.logging().logToOutput("[CacheDeceptionScan] Detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");
+            api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");
 
             //Delimiter Scan
             if (serv.getOriginDelimiters() != null && serv.getKeyDelimiters() != null) {
+                api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Attempting delimiter extension rule scan...");
                 List<String> discrepancyOriginDelimiters = new ArrayList<>();
                 for (String delim : serv.getOriginDelimiters()) {
                     if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim))
@@ -79,6 +82,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
 
             //Cache key normalization scan
             if (serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginDelimiters() != null){
+                api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Attempting cache key normalization scan (encoded segment)...");
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String delimiter : serv.getOriginDelimiters()) {
@@ -104,6 +108,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
 
             //Cache key normalization scan (backslash)
             if (serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_BACK_SEGMENT] && serv.getOriginDelimiters() != null){
+                api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Attempting cache key normalization scan (encoded backslash segment)...");
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String delimiter : serv.getOriginDelimiters()) {
@@ -129,6 +134,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
 
             //Origin normalizaiton scan
             if (serv.getOriginNormalization() != null && serv.getOriginNormalization()[Server.ENCODED_SEGMENT]){
+                api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Attempting origin normalization scan (encoded segment)...");
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {
@@ -150,6 +156,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
 
             //Origin normalization Scan
             if (serv.getOriginNormalization() != null && serv.getOriginNormalization()[Server.ENCODED_BACK_SEGMENT]){
+                api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Attempting origin normalization scan (encoded backslash segment)...");
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String dir : this.staticDirs) {

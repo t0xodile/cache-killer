@@ -13,8 +13,7 @@ import extensions.cachekiller.Utils.Server;
 
 import javax.swing.*;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 import static burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue;
 import static extensions.cachekiller.Utils.Server.isCachedResponse;
@@ -22,39 +21,75 @@ import static extensions.cachekiller.Utils.Server.sendHTTP1Request;
 
 public abstract class ScanWorker extends SwingWorker<Void, Void> {
 
-    protected HttpRequestResponse requestResponse;
+    protected List<HttpRequestResponse> requestResponses;
     protected final MontoyaApi api;
     protected final boolean fullSiteMap;
     protected final boolean subHosts;
+    private Runnable onComplete;
 
-    public ScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, boolean fullSiteMap, boolean subHosts){
+    public ScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponses, boolean fullSiteMap, boolean subHosts){
         this.api = api;
-        this.requestResponse = requestResponse.get(0);
+        this.requestResponses = new ArrayList<>(requestResponses);
         this.fullSiteMap = fullSiteMap;
         this.subHosts = subHosts;
+    }
+
+    public void setOnComplete(Runnable onComplete) {
+        this.onComplete = onComplete;
     }
 
     @Override
     protected Void doInBackground() {
         try {
             scan();
+        } catch (CancellationException e) {
+            api.logging().logToOutput("[ScanWorker] Scan cancelled.");
         } catch (Throwable e) {
             api.logging().logToOutput("[ScanWorker] ERROR: Scan failed - " + e.getClass().getName() + ": " + e.getMessage());
             java.io.StringWriter sw = new java.io.StringWriter();
             e.printStackTrace(new java.io.PrintWriter(sw));
             api.logging().logToError(sw.toString());
+        } finally {
+            if (onComplete != null) {
+                onComplete.run();
+            }
         }
         return null;
     }
 
+    /**
+     * Throws CancellationException if this worker has been cancelled.
+     * Call this at key points in scan loops to support clean shutdown.
+     */
+    protected void checkCancelled() {
+        if (isCancelled()) {
+            throw new CancellationException("Worker cancelled");
+        }
+    }
+
     public HashMap<String, Server> getServers(){
         HashMap<String, Server> servers = new HashMap<>();
-        api.logging().logToOutput("[ScanWorker] Discovering servers for host: " + requestResponse.httpService().host() + " (fullSiteMap=" + fullSiteMap + ")");
-        sendHTTP1Request(Server.addRequestCacheBuster(this.requestResponse.request()));
-        String host = requestResponse.httpService().host();
+        Set<String> hosts = new LinkedHashSet<>();
+        for (HttpRequestResponse rr : requestResponses) {
+            hosts.add(rr.httpService().host());
+        }
+        api.logging().logToOutput("[ScanWorker] Discovering servers for " + hosts.size() + " host(s): " + hosts + " (fullSiteMap=" + fullSiteMap + ")");
+
         if (fullSiteMap){
+            for (HttpRequestResponse rr : requestResponses) {
+                sendHTTP1Request(Server.addRequestCacheBuster(rr.request()));
+            }
             for (HttpRequestResponse reqResp : api.siteMap().requestResponses()){
-                if (!(reqResp.httpService().host().equals(host) || (subHosts && reqResp.httpService().host().endsWith("."+host)))) continue;
+                checkCancelled();
+                String reqHost = reqResp.httpService().host();
+                boolean matches = false;
+                for (String host : hosts) {
+                    if (reqHost.equals(host) || (subHosts && reqHost.endsWith("." + host))) {
+                        matches = true;
+                        break;
+                    }
+                }
+                if (!matches) continue;
                 HttpRequestResponse testReqResp = sendHTTP1Request(Server.addRequestCacheBuster(reqResp.request()));
                 if (!testReqResp.hasResponse() || testReqResp.response().statusCode() == 0) continue;
                 String serverHash = Server.getNetworkHash(testReqResp);
@@ -68,18 +103,27 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
             }
         }
         else{
-            HttpRequestResponse testReqResp = sendHTTP1Request(Server.addRequestCacheBuster(this.requestResponse.request()));
-            if (testReqResp.hasResponse() && testReqResp.response().statusCode() != 0) {
-                String serverHash = Server.getNetworkHash(testReqResp);
-                servers.put(serverHash, new Server(serverHash, api));
-                servers.get(serverHash).addRequestResponse(this.requestResponse);
+            Set<String> probedServerHashes = new HashSet<>();
+            for (HttpRequestResponse rr : requestResponses) {
+                checkCancelled();
+                HttpRequestResponse testReqResp = sendHTTP1Request(Server.addRequestCacheBuster(rr.request()));
+                if (testReqResp.hasResponse() && testReqResp.response().statusCode() != 0) {
+                    String serverHash = Server.getNetworkHash(testReqResp);
+                    if (!servers.containsKey(serverHash)) {
+                        servers.put(serverHash, new Server(serverHash, api));
+                    }
+                    servers.get(serverHash).addRequestResponse(rr);
 
-                //Add common static cacheable paths
-                for (String path : Server.FALLBACK_STATIC_PATHS) {
-                    HttpRequestResponse fallbackResp = sendHTTP1Request(this.requestResponse.request().withPath(path));
-                    if (fallbackResp.hasResponse() && fallbackResp.response().statusCode() > 0) {
-                        if (isCachedResponse(fallbackResp) != 0) {
-                            servers.get(serverHash).addStaticRequest(fallbackResp);
+                    // Probe fallback static paths once per server hash
+                    if (probedServerHashes.add(serverHash)) {
+                        for (String path : Server.FALLBACK_STATIC_PATHS) {
+                            checkCancelled();
+                            HttpRequestResponse fallbackResp = sendHTTP1Request(rr.request().withPath(path));
+                            if (fallbackResp.hasResponse() && fallbackResp.response().statusCode() > 0) {
+                                if (isCachedResponse(fallbackResp) != 0) {
+                                    servers.get(serverHash).addStaticRequest(fallbackResp);
+                                }
+                            }
                         }
                     }
                 }
@@ -139,4 +183,13 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
     }
 
     abstract void scan();
+
+    /**
+     * Unchecked exception used for cancellation flow control.
+     */
+    public static class CancellationException extends RuntimeException {
+        public CancellationException(String message) {
+            super(message);
+        }
+    }
 }

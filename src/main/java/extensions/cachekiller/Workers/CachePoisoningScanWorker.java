@@ -30,6 +30,7 @@ public class CachePoisoningScanWorker extends ScanWorker {
             return;
         }
         for (Server serv : servers.values()){
+            checkCancelled();
             api.logging().logToOutput("[CachePoisoningScan] Detecting origin delimiters...");
             serv.detectOriginDelimiters(testDelimitersList);
             api.logging().logToOutput("[CachePoisoningScan] Detecting key delimiters...");

@@ -31,6 +31,7 @@ public class DelimiterScanWorker extends ScanWorker {
         HttpRequestResponse reportReq;
         int serverIndex = 0;
         for (Server serv : servers.values()){
+            checkCancelled();
             serverIndex++;
             api.logging().logToOutput("[DelimiterScan] Testing server group " + serverIndex + "/" + servers.size() + " - detecting origin delimiters with " + testDelimitersList.size() + " payloads...");
             reportReq = serv.detectOriginDelimiters(testDelimitersList);
