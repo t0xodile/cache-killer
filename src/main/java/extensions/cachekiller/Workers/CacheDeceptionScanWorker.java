@@ -12,6 +12,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static extensions.cachekiller.Utils.Server.sendHTTP1Request;
+import static extensions.cachekiller.Utils.Server.withRawPath;
 
 public class CacheDeceptionScanWorker extends ScanWorker {
 
@@ -91,7 +92,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                                 sb.append("..%2F");
                             }
                             sb.append(dir.startsWith("/") ? dir.substring(1) : dir);
-                            HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
+                            HttpRequestResponse testReq = sendHTTP1Request(withRawPath(reqResp.request(), sb.toString()));
                             HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
                             if (cachedResp != null){
                                 reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Key Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
@@ -116,7 +117,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                                 sb.append("..%5C");
                             }
                             sb.append(dir.startsWith("/") ? dir.substring(1) : dir);
-                            HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
+                            HttpRequestResponse testReq = sendHTTP1Request(withRawPath(reqResp.request(), sb.toString()));
                             HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
                             if (cachedResp != null){
                                 reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Key Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
@@ -175,10 +176,10 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     public List<HttpRequestResponse[]> testExtensionRule(Server server, String delimiter, List<String> extensions){
         List<HttpRequestResponse[]> out = new ArrayList<>();
         for (HttpRequestResponse reqResp : server.getDynamicRequest()) {
-            HttpRequestResponse testReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter+(delimiter.equals(".") ? ".": "")+"aaaaa"));
+            HttpRequestResponse testReq = sendHTTP1Request(setRawPathSuffix(reqResp.request(), delimiter+(delimiter.equals(".") ? ".": "")+"aaaaa"));
             if (testReq.hasResponse() && testReq.response().statusCode() != 0 && compareResp(testReq.response(), reqResp.response())) {
                 for (String ext : extensions) {
-                    HttpRequestResponse initialReq = sendHTTP1Request(setPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "" : ".") + ext));
+                    HttpRequestResponse initialReq = sendHTTP1Request(setRawPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "" : ".") + ext));
                     boolean cached = triggerCache(initialReq.request());
                     HttpRequestResponse cachedReq = sendHTTP1Request(initialReq.request());
                     if (cached || !containSameCacheHeaders(cachedReq, reqResp)) {
@@ -286,9 +287,9 @@ public class CacheDeceptionScanWorker extends ScanWorker {
         }
         else return (r1 == r2);
     }
-    public static HttpRequest setPathSuffix(HttpRequest base, String suffix){
-        if (!base.path().contains("?")) return base.withPath(base.path()+suffix);
-        return base.withPath(base.path().substring(0, base.path().indexOf("?"))+suffix+base.path().substring(base.path().indexOf("?")));
+    public static HttpRequest setRawPathSuffix(HttpRequest base, String suffix){
+        if (!base.path().contains("?")) return withRawPath(base, base.path()+suffix);
+        return withRawPath(base, base.path().substring(0, base.path().indexOf("?"))+suffix+base.path().substring(base.path().indexOf("?")));
     }
 
     public static boolean isSentByBrowser(String delimiter){

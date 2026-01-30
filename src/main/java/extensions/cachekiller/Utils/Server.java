@@ -111,7 +111,7 @@ public class Server {
         if (baseReqResp.response().statusCode() == notfound.response().statusCode()) return null;
 
         for (String delim : delimiters) {
-            HttpRequestResponse testReqResp = sendHTTP1Request(baseReqResp.request().withPath(baseReqResp.request().pathWithoutQuery() + delim + randomNonce(9) + getQuery(baseReqResp.request())));
+            HttpRequestResponse testReqResp = sendHTTP1Request(withRawPath(baseReqResp.request(), baseReqResp.request().pathWithoutQuery() + delim + randomNonce(9) + getQuery(baseReqResp.request())));
             if (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response())) {
                 out.add(delim);
             }
@@ -147,7 +147,7 @@ public class Server {
         if (cacheCount==0) return null;
 
         for (String delim : delimiters) {
-            HttpRequestResponse testReqResp = sendHTTP1Request(baseReqResp.request().withPath(baseReqResp.request().path() + delim + randomNonce(9)));
+            HttpRequestResponse testReqResp = sendHTTP1Request(withRawPath(baseReqResp.request(), baseReqResp.request().path() + delim + randomNonce(9)));
             if (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp)) {
                 out.add(delim);
             }
@@ -547,13 +547,24 @@ public class Server {
         return request.withPath(request.path()+(getQuery(request).isEmpty() ?"?" : "&")+randomNonce(6));
     }
 
+    public static HttpRequest withRawPath(HttpRequest base, String path) {
+        byte[] requestBytes = base.toByteArray().getBytes();
+        String requestStr = new String(requestBytes, StandardCharsets.ISO_8859_1);
+        int firstSpace = requestStr.indexOf(' ');
+        int secondSpace = requestStr.indexOf(' ', firstSpace + 1);
+        String modified = requestStr.substring(0, firstSpace + 1)
+                + path
+                + requestStr.substring(secondSpace);
+        return HttpRequest.httpRequest(ByteArray.byteArray(modified.getBytes(StandardCharsets.ISO_8859_1))).withService(base.httpService());
+    }
+
     public static HttpRequestResponse sendHTTP1Request(HttpRequest req){
         HttpRequest modifiedRequest = req;
         if (req.httpVersion().equals("HTTP/2")) {
             byte[] requestBytes = req.toByteArray().getBytes();
-            String requestString = new String(requestBytes, StandardCharsets.UTF_8);
+            String requestString = new String(requestBytes, StandardCharsets.ISO_8859_1);
             requestString = requestString.replace("HTTP/2", "HTTP/1.1");
-            byte[] modifiedRequestBytes = requestString.getBytes(StandardCharsets.UTF_8);
+            byte[] modifiedRequestBytes = requestString.getBytes(StandardCharsets.ISO_8859_1);
             modifiedRequest = HttpRequest.httpRequest(ByteArray.byteArray(modifiedRequestBytes));
         }
         return api.http().sendRequest(modifiedRequest.withService(req.httpService()), RequestOptions.requestOptions().withHttpMode(HttpMode.HTTP_1));

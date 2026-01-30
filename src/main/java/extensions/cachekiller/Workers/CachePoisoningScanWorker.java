@@ -10,6 +10,7 @@ import extensions.cachekiller.Utils.Server;
 import java.util.*;
 
 import static extensions.cachekiller.Utils.Server.sendHTTP1Request;
+import static extensions.cachekiller.Utils.Server.withRawPath;
 
 public class CachePoisoningScanWorker extends ScanWorker {
 
@@ -55,9 +56,9 @@ public class CachePoisoningScanWorker extends ScanWorker {
                 for (String delim : discrepancyOriginDelimiters){
                     for (HttpRequestResponse reqResp : serv.getStaticRequest()){
                         String random = Server.randomNonce(5);
-                        sendHTTP1Request(setPathSuffix(reqResp.request(), delim+"/../"+random));
-                        sendHTTP1Request(setPathSuffix(reqResp.request(), delim+"/../"+random));
-                        HttpRequestResponse testResp = sendHTTP1Request(reqResp.request().withPath(Server.removeLastSegment(reqResp.request().path())+"/"+random));
+                        sendHTTP1Request(setRawPathSuffix(reqResp.request(), delim+"/../"+random));
+                        sendHTTP1Request(setRawPathSuffix(reqResp.request(), delim+"/../"+random));
+                        HttpRequestResponse testResp = sendHTTP1Request(withRawPath(reqResp.request(), Server.removeLastSegment(reqResp.request().path())+"/"+random));
                         if (compareResp(testResp.response(), reqResp.response())){
                             reportIssue("Web Cache Poisoning Detected", "The target appears to be normalizing the cache keys and its vulnerable to Web Cache Poisoning using the origin delimiter: '"+ScanWorker.printableStr(delim)+"'.", AuditIssueSeverity.HIGH, testResp);
                         }
@@ -70,9 +71,9 @@ public class CachePoisoningScanWorker extends ScanWorker {
                 for (String delim : discrepancyKeyDelimiters){
                     for (HttpRequestResponse reqResp : serv.getStaticRequest()){
                         String random = Server.randomNonce(5);
-                        sendHTTP1Request(reqResp.request().withPath("/"+random+delim+"/.."+reqResp.request().path()));
-                        sendHTTP1Request(reqResp.request().withPath("/"+random+delim+"/.."+reqResp.request().path()));
-                        HttpRequestResponse testResp = sendHTTP1Request(reqResp.request().withPath("/"+random));
+                        sendHTTP1Request(withRawPath(reqResp.request(), "/"+random+delim+"/.."+reqResp.request().path()));
+                        sendHTTP1Request(withRawPath(reqResp.request(), "/"+random+delim+"/.."+reqResp.request().path()));
+                        HttpRequestResponse testResp = sendHTTP1Request(withRawPath(reqResp.request(), "/"+random));
                         if (compareResp(testResp.response(), reqResp.response())){
                             reportIssue("Web Cache Poisoning Detected", "The target appears to be normalizing the path at the origin and its vulnerable to Web Cache Poisoning using the key delimiter: '"+ScanWorker.printableStr(delim)+"'.", AuditIssueSeverity.HIGH, testResp);
                         }
@@ -95,9 +96,9 @@ public class CachePoisoningScanWorker extends ScanWorker {
         }
         else return (r1 == r2);
     }
-    public static HttpRequest setPathSuffix(HttpRequest base, String suffix){
-        if (!base.path().contains("?")) return base.withPath(base.path()+suffix);
-        return base.withPath(base.path().substring(0, base.path().indexOf("?"))+suffix+base.path().substring(base.path().indexOf("?")));
+    public static HttpRequest setRawPathSuffix(HttpRequest base, String suffix){
+        if (!base.path().contains("?")) return withRawPath(base, base.path()+suffix);
+        return withRawPath(base, base.path().substring(0, base.path().indexOf("?"))+suffix+base.path().substring(base.path().indexOf("?")));
     }
 
 }
