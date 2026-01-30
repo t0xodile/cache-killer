@@ -37,7 +37,7 @@ public class CachePoisoningScanWorker extends ScanWorker {
             serv.detectOriginNormalization();
             api.logging().logToOutput("[CachePoisoningScan] Detecting key normalization...");
             serv.detectKeyNormalization();
-            if (serv.getOriginDelimiters() == null || serv.getKeyDelimiters() == null || serv.getOriginNormalization() == null || serv.getKeyNormalization() == null) {
+            if (serv.getOriginDelimiters() == null && serv.getKeyDelimiters() == null && serv.getOriginNormalization() == null && serv.getKeyNormalization() == null) {
                 api.logging().logToOutput("[CachePoisoningScan] Skipping server: insufficient detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");
                 continue;
             }
@@ -49,7 +49,9 @@ public class CachePoisoningScanWorker extends ScanWorker {
             for (String delim : serv.getKeyDelimiters()){
                 if (!serv.getOriginDelimiters().contains(delim)) discrepancyKeyDelimiters.add(delim);
             }
-            if (serv.getKeyNormalization()[Server.DOT_SEGMENT]){
+
+            //Normalizing cache key - requires origin delimiter + cache key normalization
+            if (serv.getOriginDelimiters() != null && serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.DOT_SEGMENT]){
                 for (String delim : discrepancyOriginDelimiters){
                     for (HttpRequestResponse reqResp : serv.getStaticRequest()){
                         String random = Server.randomNonce(5);
@@ -63,7 +65,8 @@ public class CachePoisoningScanWorker extends ScanWorker {
                 }
             }
 
-            if (serv.getOriginNormalization()[Server.DOT_SEGMENT]){
+            // Normalization at origin - requires key delimiter + origin normalization
+            if (serv.getKeyDelimiters() != null && serv.getOriginNormalization() !=null && serv.getOriginNormalization()[Server.DOT_SEGMENT]){
                 for (String delim : discrepancyKeyDelimiters){
                     for (HttpRequestResponse reqResp : serv.getStaticRequest()){
                         String random = Server.randomNonce(5);
