@@ -55,7 +55,7 @@ public class NormalizationScanWorker extends ScanWorker {
                 sb.append("Encoded backslash dot-segment normalized: ").append(normalizations[ENCODED_BACK_SEGMENT] ? "YES - /a/..%5Cb == /b" : "NO").append("<br>");
                 sb.append("Path is URL decoded: ").append(normalizations[PATH_DECODING] ? "YES - /%68%65%6c%6c%6f == /hello" : "NO").append("<br>");
                 sb.append("<br>The following paths appear to share the same network components and should be affected:<br>").append(serv.requestsToString());
-                reportIssue("Origin Normalization Detected", sb.toString(), AuditIssueSeverity.INFORMATION, reportReq);
+                reportIssue("Origin Normalization", sb.toString(), AuditIssueSeverity.INFORMATION, reportReq);
             }
             if (testKey) {
                 reportReq = serv.detectKeyNormalization();
@@ -75,7 +75,7 @@ public class NormalizationScanWorker extends ScanWorker {
                     sb.append("Path is URL decoded: ").append(normalizations[PATH_DECODING] ? "YES - /%68%65%6c%6c%6f == /hello" : "NO").append("<br>");
                     sb.append("Query string is part of cache key: ").append(normalizations[IS_QUERY_KEYED] ? "NO - key(/hello?abc) == key(/hello)" : "YES").append("<br>");
                     sb.append("<br>The following paths appear to share the same network components and should be affected:<br>").append(serv.requestsToString());
-                    reportIssue("Key Normalization Detected", sb.toString(), AuditIssueSeverity.INFORMATION, reportReq);
+                    reportIssue("Key Normalization", sb.toString(), AuditIssueSeverity.INFORMATION, reportReq);
                 }
             }
         }

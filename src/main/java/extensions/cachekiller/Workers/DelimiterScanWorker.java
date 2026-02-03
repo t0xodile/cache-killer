@@ -37,7 +37,7 @@ public class DelimiterScanWorker extends ScanWorker {
                     sb.append(printableStr(del));
                     sb.append("<br>");
                 }
-                reportIssue("Origin Delimiters Detected", "The following characters where detected as Origin Delimiters:<br>"+sb.toString()+"<br><br>The following paths appear to share the same network components and should be affected:<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, reportReq);
+                reportIssue("Origin Delimiters", "The following characters where detected as Origin Delimiters:<br>"+sb.toString()+"<br><br>The following paths appear to share the same network components and should be affected:<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, reportReq);
             }
             if (testKey) {
                 reportReq = serv.detectKeyDelimiters(testDelimitersList);
@@ -47,7 +47,7 @@ public class DelimiterScanWorker extends ScanWorker {
                         sb.append(printableStr(del));
                         sb.append("<br>");
                     }
-                    reportIssue("Key Delimiters Detected", "The following characters where detected as Cache Delimiters:<br>"+sb.toString()+"<br><br>The following paths appear to share the same network components and should be affected:<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, reportReq);
+                    reportIssue("Key Delimiters", "The following characters where detected as Cache Delimiters:<br>"+sb.toString()+"<br><br>The following paths appear to share the same network components and should be affected:<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, reportReq);
                 }
                 else if (reportReq != null) {
                     reportIssue("Key Delimiters", "None of the tested characters are used as Key Delimiters for the following paths that share the same network components.<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, reportReq);

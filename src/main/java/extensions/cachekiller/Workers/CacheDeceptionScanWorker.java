@@ -64,7 +64,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 for (String delim : discrepancyOriginDelimiters) {
                     vulnerableExtension = testExtensionRule(serv, delim, this.extensions);
                     for (HttpRequestResponse[] vuln : vulnerableExtension) {
-                        reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '" + ScanWorker.printableStr(delim) + "' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.", AuditIssueSeverity.HIGH, vuln[0], vuln[1]);
+                        reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '" + ScanWorker.printableStr(delim) + "' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.", AuditIssueSeverity.HIGH, vuln[0], vuln[1]);
                     }
                 }
             }
@@ -95,7 +95,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                             HttpRequestResponse testReq = sendHTTP1Request(withRawPath(reqResp.request(), sb.toString()));
                             HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
                             if (cachedResp != null){
-                                reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Key Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                                reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Cache Key Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
                             }
                         }
                     }
@@ -120,7 +120,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                             HttpRequestResponse testReq = sendHTTP1Request(withRawPath(reqResp.request(), sb.toString()));
                             HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
                             if (cachedResp != null){
-                                reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Cache Key Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                                reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Cache Key Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
                             }
                         }
                     }
@@ -142,7 +142,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                         HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
                         HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
                         if (cachedResp != null){
-                            reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Origin Server Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                            reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Origin Server Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
                         }
                     }
                 }
@@ -163,7 +163,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                         HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
                         HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
                         if (cachedResp != null){
-                            reportIssue("Web Cache Deception Detected", "The target appears to be vulnerable to Web Cache Deception with Origin Server Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                            reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Origin Server Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
                         }
                     }
                 }
