@@ -50,6 +50,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
     }
 
     public void onUnload() {
+        api.logging().logToOutput("Extension Unloaded. Shutting down all active workers...");
         for (ScanWorker worker : activeWorkers) {
             worker.cancel(true);
         }
@@ -178,10 +179,6 @@ public class CacheKiller implements ContextMenuItemsProvider {
                 default:
                     testDelimitersList = new ArrayList<>();
             }
-            api.logging().logToOutput("testDelimiters: "+testDelimitersList);
-            api.logging().logToOutput("fullSite: "+fullSitemapScanCheckbox.isSelected());
-            api.logging().logToOutput("subHost: "+detectSubHostDelimitersCheckbox.isSelected());
-            api.logging().logToOutput("keys: "+detectKeyDelimitersCheckbox.isSelected());
             try {
                 launchBulkScan(requestResponse, "DelimiterScan", hostRequests ->
                         new DelimiterScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), detectKeyDelimitersCheckbox.isSelected()));
@@ -664,9 +661,6 @@ public class CacheKiller implements ContextMenuItemsProvider {
         }
 
         int totalHosts = hostGroups.size();
-        int totalRequests = requestResponse.size();
-        api.logging().logToOutput("[CacheKiller] Starting bulk scan: " + totalHosts + " host(s), " + totalRequests + " total request(s)");
-
         AtomicInteger completedCount = new AtomicInteger(0);
 
         for (Map.Entry<String, List<HttpRequestResponse>> entry : hostGroups.entrySet()) {

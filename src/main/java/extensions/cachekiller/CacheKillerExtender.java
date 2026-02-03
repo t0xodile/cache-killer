@@ -59,6 +59,8 @@ public class CacheKillerExtender implements BurpExtension {
                     }
                 }
         );
+
+        api.logging().logToOutput("CacheKiller loaded - https://portswigger.net/research/gotta-cache-em-all");
     }
 
     private List<HttpRequestResponse> getRequestsFromEvent(burp.api.montoya.ui.hotkey.HotKeyEvent event) {

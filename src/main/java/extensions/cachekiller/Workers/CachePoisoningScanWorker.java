@@ -22,22 +22,16 @@ public class CachePoisoningScanWorker extends ScanWorker {
     }
 
     public void scan(){
-        api.logging().logToOutput("[CachePoisoningScan] Scan started");
         HashMap<String, Server> servers = getServers();
-        api.logging().logToOutput("[CachePoisoningScan] Found " + servers.size() + " server group(s) to test");
         if (servers.isEmpty()) {
             api.logging().logToOutput("[CachePoisoningScan] No servers found. Ensure the selected request returns a valid response.");
             return;
         }
         for (Server serv : servers.values()){
             checkCancelled();
-            api.logging().logToOutput("[CachePoisoningScan] Detecting origin delimiters...");
             serv.detectOriginDelimiters(testDelimitersList);
-            api.logging().logToOutput("[CachePoisoningScan] Detecting key delimiters...");
             serv.detectKeyDelimiters(testDelimitersList);
-            api.logging().logToOutput("[CachePoisoningScan] Detecting origin normalization...");
             serv.detectOriginNormalization();
-            api.logging().logToOutput("[CachePoisoningScan] Detecting key normalization...");
             serv.detectKeyNormalization();
             if (serv.getOriginDelimiters() == null && serv.getKeyDelimiters() == null && serv.getOriginNormalization() == null && serv.getKeyNormalization() == null) {
                 api.logging().logToOutput("[CachePoisoningScan] Skipping server: insufficient detection results (originDelimiters=" + (serv.getOriginDelimiters() != null) + ", keyDelimiters=" + (serv.getKeyDelimiters() != null) + ", originNorm=" + (serv.getOriginNormalization() != null) + ", keyNorm=" + (serv.getKeyNormalization() != null) + ").");

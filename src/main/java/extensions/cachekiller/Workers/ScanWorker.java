@@ -25,6 +25,7 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
     protected final MontoyaApi api;
     protected final boolean fullSiteMap;
     protected final boolean subHosts;
+    protected boolean probeStaticPaths = true;
     private Runnable onComplete;
 
     public ScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponses, boolean fullSiteMap, boolean subHosts){
@@ -73,8 +74,6 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
         for (HttpRequestResponse rr : requestResponses) {
             hosts.add(rr.httpService().host());
         }
-        api.logging().logToOutput("[ScanWorker] Discovering servers for " + hosts.size() + " host(s): " + hosts + " (fullSiteMap=" + fullSiteMap + ")");
-
         if (fullSiteMap){
             for (HttpRequestResponse rr : requestResponses) {
                 sendHTTP1Request(Server.addRequestCacheBuster(rr.request()));
@@ -103,6 +102,8 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
             }
         }
         else{
+            // Note: requests are classified as static/dynamic by addRequestResponse().
+            // Scan workers must handle the case where dynamicReqs is empty (all requests were cached).
             Set<String> probedServerHashes = new HashSet<>();
             for (HttpRequestResponse rr : requestResponses) {
                 checkCancelled();
@@ -114,8 +115,8 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
                     }
                     servers.get(serverHash).addRequestResponse(rr);
 
-                    // Probe fallback static paths once per server hash
-                    if (probedServerHashes.add(serverHash)) {
+                    // Probe fallback static paths once per server hash (only needed for key detection)
+                    if (probeStaticPaths && probedServerHashes.add(serverHash)) {
                         for (String path : Server.FALLBACK_STATIC_PATHS) {
                             checkCancelled();
                             HttpRequestResponse fallbackResp = sendHTTP1Request(rr.request().withPath(path));

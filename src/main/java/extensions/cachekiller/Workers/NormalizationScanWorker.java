@@ -27,12 +27,11 @@ public class NormalizationScanWorker extends ScanWorker {
     public NormalizationScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, boolean fullSiteMap, boolean subHosts, boolean testKey){
         super(api, requestResponse, fullSiteMap, subHosts);
         this.testKey = testKey;
+        this.probeStaticPaths = testKey;
     }
 
     public void scan(){
-        api.logging().logToOutput("[NormalizationScan] Scan started");
         HashMap<String, Server> servers = getServers();
-        api.logging().logToOutput("[NormalizationScan] Found " + servers.size() + " server group(s) to test");
         if (servers.isEmpty()) {
             api.logging().logToOutput("[NormalizationScan] No servers found. Ensure the selected request returns a valid response.");
             return;
@@ -40,7 +39,6 @@ public class NormalizationScanWorker extends ScanWorker {
         HttpRequestResponse reportReq;
         for (Server serv : servers.values()){
             checkCancelled();
-            api.logging().logToOutput("[NormalizationScan] Detecting origin normalization...");
             reportReq = serv.detectOriginNormalization();
             if (serv.getOriginNormalization() != null) {
                 boolean[] normalizations = serv.getOriginNormalization();
@@ -82,8 +80,5 @@ public class NormalizationScanWorker extends ScanWorker {
             }
         }
     }
-
-
-
 
 }

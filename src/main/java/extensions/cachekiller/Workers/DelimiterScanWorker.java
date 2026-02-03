@@ -18,22 +18,18 @@ public class DelimiterScanWorker extends ScanWorker {
         super(api, requestResponse, fullSiteMap, subHosts);
         this.testDelimitersList = new ArrayList<>(testDelimitersList);
         this.testKey = testKey;
+        this.probeStaticPaths = testKey;
     }
 
     public void scan(){
-        api.logging().logToOutput("[DelimiterScan] Scan started");
         HashMap<String, Server> servers = getServers();
-        api.logging().logToOutput("[DelimiterScan] Found " + servers.size() + " server group(s) to test");
         if (servers.isEmpty()) {
             api.logging().logToOutput("[DelimiterScan] No servers found. Ensure the selected request returns a valid response.");
             return;
         }
         HttpRequestResponse reportReq;
-        int serverIndex = 0;
         for (Server serv : servers.values()){
             checkCancelled();
-            serverIndex++;
-            api.logging().logToOutput("[DelimiterScan] Testing server group " + serverIndex + "/" + servers.size() + " - detecting origin delimiters with " + testDelimitersList.size() + " payloads...");
             reportReq = serv.detectOriginDelimiters(testDelimitersList);
             if (serv.getOriginDelimiters() != null && !serv.getOriginDelimiters().isEmpty()) {
                 StringBuilder sb = new StringBuilder();
@@ -61,6 +57,5 @@ public class DelimiterScanWorker extends ScanWorker {
                 }
             }
         }
-        api.logging().logToOutput("[DelimiterScan] Scan finished");
     }
 }
