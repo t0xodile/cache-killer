@@ -19,15 +19,17 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     private final List<String> testDelimitersList;
     private final List<String> extensions;
     private List<String> staticDirs;
+    private final boolean reportDetectionResults;
     public static final List<Character> BROWSER_ENCODED = new ArrayList<>(Arrays.asList('"', '^', '{', '}', '`','|','<','>','#','?','\\'));
 
 
-    public CacheDeceptionScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, List<String> testDelimitersList, boolean fullSiteMap, boolean subHosts, List<String> extensions, List<String> staticDirs){
+    public CacheDeceptionScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, List<String> testDelimitersList, boolean fullSiteMap, boolean subHosts, List<String> extensions, List<String> staticDirs, boolean reportDetectionResults){
         super(api, requestResponse, fullSiteMap, subHosts);
         this.extensions = new ArrayList<>(extensions);
         if (staticDirs == null) this.staticDirs = null;
         else this.staticDirs = new ArrayList<>(staticDirs);
         this.testDelimitersList = new ArrayList<>(testDelimitersList);
+        this.reportDetectionResults = reportDetectionResults;
     }
 
     public void scan(){
@@ -42,16 +44,72 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 api.logging().logToOutput("[CacheDeceptionScan] Skipping server group: no dynamic (non-cached) requests found. All selected requests appear to already be cached.");
                 continue;
             }
-            serv.detectOriginDelimiters(testDelimitersList);
-            serv.detectKeyDelimiters(testDelimitersList);
-            serv.detectOriginNormalization();
-            serv.detectKeyNormalization();
+            HttpRequestResponse originDelimReportReq = serv.detectOriginDelimiters(testDelimitersList);
+            HttpRequestResponse keyDelimReportReq = serv.detectKeyDelimiters(testDelimitersList);
+            HttpRequestResponse originNormReportReq = serv.detectOriginNormalization();
+            HttpRequestResponse keyNormReportReq = serv.detectKeyNormalization();
 
             String host = serv.getDynamicRequest().get(0).httpService().host();
 
             if (serv.getOriginDelimiters() == null && serv.getKeyDelimiters() == null && serv.getOriginNormalization() == null && serv.getKeyNormalization() == null) {
                 api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Skipping server: no detection results.");
                 continue;
+            }
+
+            if (reportDetectionResults) {
+                if (serv.getOriginDelimiters() != null && !serv.getOriginDelimiters().isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    for (String del : serv.getOriginDelimiters()) {
+                        sb.append(printableStr(del));
+                        sb.append("<br>");
+                    }
+                    reportIssue("Origin Delimiters", "The following characters where detected as Origin Delimiters:<br>"+sb.toString()+"<br><br>The following paths appear to share the same network components and should be affected:<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, originDelimReportReq);
+                }
+                if (serv.getKeyDelimiters() != null && !serv.getKeyDelimiters().isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    for (String del : serv.getKeyDelimiters()) {
+                        sb.append(printableStr(del));
+                        sb.append("<br>");
+                    }
+                    reportIssue("Key Delimiters", "The following characters where detected as Cache Delimiters:<br>"+sb.toString()+"<br><br>The following paths appear to share the same network components and should be affected:<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, keyDelimReportReq);
+                } else if (keyDelimReportReq != null) {
+                    reportIssue("Key Delimiters", "None of the tested characters are used as Key Delimiters for the following paths that share the same network components.<br>"+serv.requestsToString(), AuditIssueSeverity.INFORMATION, keyDelimReportReq);
+                }
+                if (serv.getOriginNormalization() != null) {
+                    boolean[] normalizations = serv.getOriginNormalization();
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("The following Normalization behaviour was detected at the origin server:<br>");
+                    sb.append("Single dot normalized: ").append(normalizations[Server.SINGLE_DOT] ? "YES - /a/./b == /a/b" : "NO").append("<br>");
+                    sb.append("Dot-segment normalized: ").append(normalizations[Server.DOT_SEGMENT] ? "YES - /a/../b == /b" : "NO").append("<br>");
+                    sb.append("Backslash normalized: ").append(normalizations[Server.BACK_SLASH] ? "YES - /a\\b == /a/b" : "NO").append("<br>");
+                    sb.append("Backslash dot-segment normalized: ").append(normalizations[Server.BACKSLASH_DOT_SEGMENT] ? "YES - /a/..\\b == /b" : "NO").append("<br>");
+                    sb.append("Multi-slash removed: ").append(normalizations[Server.MULTI_SLASH] ? "YES - /a////b == /b" : "NO").append("<br>");
+                    sb.append("Encoded slash normalized: ").append(normalizations[Server.ENCODED_SLASH] ? "YES - /a%2Fb == /a/b" : "NO").append("<br>");
+                    sb.append("Encoded backslash normalized: ").append(normalizations[Server.ENCODED_BACKSLASH] ? "YES - /a%5Cb == /a/b" : "NO").append("<br>");
+                    sb.append("Encoded dot-segment normalized: ").append(normalizations[Server.ENCODED_SEGMENT] ? "YES - /a/..%2Fb == /b" : "NO").append("<br>");
+                    sb.append("Encoded backslash dot-segment normalized: ").append(normalizations[Server.ENCODED_BACK_SEGMENT] ? "YES - /a/..%5Cb == /b" : "NO").append("<br>");
+                    sb.append("Path is URL decoded: ").append(normalizations[Server.PATH_DECODING] ? "YES - /%68%65%6c%6c%6f == /hello" : "NO").append("<br>");
+                    sb.append("<br>The following paths appear to share the same network components and should be affected:<br>").append(serv.requestsToString());
+                    reportIssue("Origin Normalization", sb.toString(), AuditIssueSeverity.INFORMATION, originNormReportReq);
+                }
+                if (serv.getKeyNormalization() != null) {
+                    boolean[] normalizations = serv.getKeyNormalization();
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("The following Normalization behaviour was detected at the cache proxy:<br>");
+                    sb.append("Single dot normalized: ").append(normalizations[Server.SINGLE_DOT] ? "YES - /a/./b == /a/b" : "NO").append("<br>");
+                    sb.append("Dot-segment normalized: ").append(normalizations[Server.DOT_SEGMENT] ? "YES - /a/../b == /b" : "NO").append("<br>");
+                    sb.append("Backslash normalized: ").append(normalizations[Server.BACK_SLASH] ? "YES - /a\\b == /a/b" : "NO").append("<br>");
+                    sb.append("Backslash dot-segment normalized: ").append(normalizations[Server.BACKSLASH_DOT_SEGMENT] ? "YES - /a/..\\b == /b" : "NO").append("<br>");
+                    sb.append("Multi-slash removed: ").append(normalizations[Server.MULTI_SLASH] ? "YES - /a////b == /b" : "NO").append("<br>");
+                    sb.append("Encoded slash normalized: ").append(normalizations[Server.ENCODED_SLASH] ? "YES - /a%2Fb == /a/b" : "NO").append("<br>");
+                    sb.append("Encoded backslash normalized: ").append(normalizations[Server.ENCODED_BACKSLASH] ? "YES - /a%5Cb == /a/b" : "NO").append("<br>");
+                    sb.append("Encoded dot-segment normalized: ").append(normalizations[Server.ENCODED_SEGMENT] ? "YES - /a/..%2Fb == /b" : "NO").append("<br>");
+                    sb.append("Encoded backslash dot-segment normalized: ").append(normalizations[Server.ENCODED_BACK_SEGMENT] ? "YES - /a/..%5Cb == /b" : "NO").append("<br>");
+                    sb.append("Path is URL decoded: ").append(normalizations[Server.PATH_DECODING] ? "YES - /%68%65%6c%6c%6f == /hello" : "NO").append("<br>");
+                    sb.append("Query string is part of cache key: ").append(normalizations[Server.IS_QUERY_KEYED] ? "NO - key(/hello?abc) == key(/hello)" : "YES").append("<br>");
+                    sb.append("<br>The following paths appear to share the same network components and should be affected:<br>").append(serv.requestsToString());
+                    reportIssue("Key Normalization", sb.toString(), AuditIssueSeverity.INFORMATION, keyNormReportReq);
+                }
             }
             //Delimiter Scan
             if (serv.getOriginDelimiters() != null && serv.getKeyDelimiters() != null) {

@@ -343,6 +343,11 @@ public class CacheKiller implements ContextMenuItemsProvider {
         detectSubHostDelimitersOptionPanel.add(detectSubHostDelimitersCheckbox);
         mainPanel.add(detectSubHostDelimitersOptionPanel);
 
+        // Report Detection Results Option
+        JCheckBox reportDetectionResultsCheckbox = new JCheckBox("Report detection results");
+        JPanel reportDetectionResultsOptionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        reportDetectionResultsOptionPanel.add(reportDetectionResultsCheckbox);
+        mainPanel.add(reportDetectionResultsOptionPanel);
 
         // Start Button
         JButton startButton = new JButton("Start");
@@ -459,7 +464,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
             }
             try {
                 launchBulkScan(requestResponse, "CacheDeceptionScan", hostRequests ->
-                        new CacheDeceptionScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), extensionsList, staticDirectories));
+                        new CacheDeceptionScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), extensionsList, staticDirectories, reportDetectionResultsCheckbox.isSelected()));
             } catch (Throwable t) {
                 api.logging().logToOutput("ERROR: Failed to start cache deception scan - " + t.getClass().getName() + ": " + t.getMessage());
             }
