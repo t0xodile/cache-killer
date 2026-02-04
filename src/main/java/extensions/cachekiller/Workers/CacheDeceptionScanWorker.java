@@ -113,6 +113,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             }
             //Delimiter Scan
             if (serv.getOriginDelimiters() != null && serv.getKeyDelimiters() != null) {
+                //TODO getKeyDelimiters() CAN be empty... we only need a valid origin delimiter. We just canot have the same delimiter for key and origin.
                 List<String> discrepancyOriginDelimiters = new ArrayList<>();
                 for (String delim : serv.getOriginDelimiters()) {
                     if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim))
