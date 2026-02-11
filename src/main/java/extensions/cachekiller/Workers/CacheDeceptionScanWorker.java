@@ -20,7 +20,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     private final List<String> extensions;
     private List<String> staticDirs;
     private final boolean reportDetectionResults;
-    public static final List<Character> BROWSER_ENCODED = new ArrayList<>(Arrays.asList('"', '^', '{', '}', '`','|','<','>','#','?','\\'));
+    public static final List<Character> BROWSER_ENCODED = new ArrayList<>(Arrays.asList('"', '^', '{', '}', '`','|','<','>','#','\\'));
 
 
     public CacheDeceptionScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, List<String> testDelimitersList, boolean fullSiteMap, boolean subHosts, List<String> extensions, List<String> staticDirs, boolean reportDetectionResults){
@@ -112,11 +112,16 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 }
             }
             //Delimiter Scan
-            if (serv.getOriginDelimiters() != null && serv.getKeyDelimiters() != null) {
+            if (serv.getOriginDelimiters() != null) {
                 List<String> discrepancyOriginDelimiters = new ArrayList<>();
                 for (String delim : serv.getOriginDelimiters()) {
-                    if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim))
+                    if (serv.getKeyDelimiters() == null) {
+                        if (isSentByBrowser(delim)) {
+                            discrepancyOriginDelimiters.add(delim);
+                        }
+                    } else if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim)) {
                         discrepancyOriginDelimiters.add(delim);
+                    }
                 }
                 List<HttpRequestResponse[]> vulnerableExtension;
                 for (String delim : discrepancyOriginDelimiters) {
@@ -129,7 +134,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             if (this.staticDirs == null) {
                 this.staticDirs = new ArrayList<>(detectStaticDirectories(serv));
             }
-            for (String fallback : List.of("/robots.txt", "/favicon.ico", "/index.html", "/home", "/resources")) {
+            for (String fallback : List.of("/robots.txt", "/sitemap.xml", "/favicon.ico", "/index.html", "/home", "/resources")) {
                 if (!this.staticDirs.contains(fallback)) {
                     this.staticDirs.add(fallback);
                 }
