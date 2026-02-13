@@ -21,7 +21,7 @@ public class Server {
     public static final List<String> BAD_CHARS = new ArrayList<>(Arrays.asList(""+(char)0x00, "%00", ""+(char)0x7F, "#", "\tabc", "%xx", " abcd", "?<>", "/a/b/c/d/e/../../../../../f" ,"\r", "\n"));
     public static final List<String> SERVER_KEYWORDS = new ArrayList<>(Arrays.asList("cloudflare", "cloudfront", "azure", "nginx", "apache", "microsoft", "google", "fastly", "imperva", "akamai", "java", "puma", "x-amz"));
     public static final List<String> STATIC_EXTENSIONS  = new ArrayList<>(Arrays.asList("7Z",  "CSV",  "GIF",  "MIDI",  "PNG",  "TIF",  "ZIP", "AVI",  "DOC",  "GZ",  "MKV",  "PPT",  "TIFF",  "ZST", "AVIF",  "DOCX",  "ICO",  "MP3",  "PPTX",  "TTF",  "APK",  "DMG",  "ISO",  "MP4",  "PS",  "WEBM",  "BIN",  "EJS",  "JAR",  "OGG",  "RAR",  "WEBP",  "BMP",  "EOT",  "JPG",  "OTF",  "SVG",  "WOFF",  "BZ2",  "EPS",  "JPEG",  "PDF",  "SVGZ",  "WOFF2",  "CLASS",  "EXE",  "JS",  "PICT",  "SWF",  "XLS",  "CSS",  "FLAC",  "MID",  "PLS",  "TAR",  "XLSX"));
-    public static final List<String> FALLBACK_STATIC_PATHS = List.of("/robots.txt", "/favicon.ico", "/sitemap.xml", "/index.html", "/home", "/resources");
+    public static final List<String> FALLBACK_STATIC_PATHS = List.of("/robots.txt", "/favicon.ico", "/sitemap.xml", "/index.html", "/home", "/resources", "/wp-content", "/media", "/public", "/assets", "/static", "/shared", "/images");
 
     public static final int SINGLE_DOT = 0;
     public static final int DOT_SEGMENT = 1;

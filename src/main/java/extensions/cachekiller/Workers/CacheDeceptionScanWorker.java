@@ -134,14 +134,14 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             }
 
             //TODO evaulate if this is even needed....
-            if (this.staticDirs == null) {
-                this.staticDirs = new ArrayList<>(detectStaticDirectories(serv));
-            }
-            for (String fallback : FALLBACK_STATIC_PATHS) {
-                if (!this.staticDirs.contains(fallback)) {
-                    this.staticDirs.add(fallback);
-                }
-            }
+//            if (this.staticDirs == null) {
+//                this.staticDirs = new ArrayList<>(detectStaticDirectories(serv));
+//            }
+//            for (String fallback : FALLBACK_STATIC_PATHS) {
+//                if (!this.staticDirs.contains(fallback)) {
+//                    this.staticDirs.add(fallback);
+//                }
+//            }
 
             //Cache key normalization scan
             if (serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginDelimiters() != null) {

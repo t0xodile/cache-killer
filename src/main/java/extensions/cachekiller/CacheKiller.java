@@ -447,14 +447,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
                     break;
                 case "BASE_LIST":
                     staticDirectories = new ArrayList<>();
-                    staticDirectories.add("/static");
-                    staticDirectories.add("/resources");
-                    staticDirectories.add("/shared");
-                    staticDirectories.add("/public");
-                    staticDirectories.add("/assets");
-                    staticDirectories.add("/wp-content");
-                    staticDirectories.add("/media");
-                    staticDirectories.add("images");
+                    staticDirectories.addAll(Server.FALLBACK_STATIC_PATHS);
                     break;
                 case "DETECT":
                     staticDirectories = null;

@@ -101,7 +101,7 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
                 }
             }
         }
-        else{
+        else {
             // Note: requests are classified as static/dynamic by addRequestResponse().
             // Scan workers must handle the case where dynamicReqs is empty (all requests were cached).
             Set<String> probedServerHashes = new HashSet<>();
