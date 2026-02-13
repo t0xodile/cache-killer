@@ -11,8 +11,7 @@ import extensions.cachekiller.Utils.Server;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-import static extensions.cachekiller.Utils.Server.sendHTTP1Request;
-import static extensions.cachekiller.Utils.Server.withRawPath;
+import static extensions.cachekiller.Utils.Server.*;
 
 public class CacheDeceptionScanWorker extends ScanWorker {
 
@@ -49,13 +48,14 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             HttpRequestResponse originNormReportReq = serv.detectOriginNormalization();
             HttpRequestResponse keyNormReportReq = serv.detectKeyNormalization();
 
-            String host = serv.getDynamicRequest().get(0).httpService().host();
+            String host = serv.getDynamicRequest().getFirst().httpService().host();
 
             if (serv.getOriginDelimiters() == null && serv.getKeyDelimiters() == null && serv.getOriginNormalization() == null && serv.getKeyNormalization() == null) {
                 api.logging().logToOutput("[CacheDeceptionScan] ["+host+"] Skipping server: no detection results.");
                 continue;
             }
 
+            //TODO this is dupe code for sure... clean up
             if (reportDetectionResults) {
                 if (serv.getOriginDelimiters() != null && !serv.getOriginDelimiters().isEmpty()) {
                     StringBuilder sb = new StringBuilder();
@@ -111,6 +111,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                     reportIssue("Key Normalization", sb.toString(), AuditIssueSeverity.INFORMATION, keyNormReportReq);
                 }
             }
+
             //Delimiter Scan
             if (serv.getOriginDelimiters() != null) {
                 List<String> discrepancyOriginDelimiters = new ArrayList<>();
@@ -119,7 +120,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                         if (isSentByBrowser(delim)) {
                             discrepancyOriginDelimiters.add(delim);
                         }
-                    } else if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim)) {
+                    } else if (isSentByBrowser(delim) && !serv.getKeyDelimiters().contains(delim)) { //if the cache uses the same delimiter, it'll break the poc
                         discrepancyOriginDelimiters.add(delim);
                     }
                 }
@@ -131,17 +132,19 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                     }
                 }
             }
+
+            //TODO evaulate if this is even needed....
             if (this.staticDirs == null) {
                 this.staticDirs = new ArrayList<>(detectStaticDirectories(serv));
             }
-            for (String fallback : List.of("/robots.txt", "/sitemap.xml", "/favicon.ico", "/index.html", "/home", "/resources")) {
+            for (String fallback : FALLBACK_STATIC_PATHS) {
                 if (!this.staticDirs.contains(fallback)) {
                     this.staticDirs.add(fallback);
                 }
             }
 
             //Cache key normalization scan
-            if (serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginDelimiters() != null){
+            if (serv.getKeyNormalization() != null && serv.getKeyNormalization()[Server.ENCODED_SEGMENT] && serv.getOriginDelimiters() != null) {
                 for (HttpRequestResponse reqResp : serv.getDynamicRequest()) {
                     if (reqResp.request().pathWithoutQuery().length()<2) continue;
                     for (String delimiter : serv.getOriginDelimiters()) {
@@ -309,7 +312,17 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             }
         }
 
-        return cacheableResponse.hasHeader("Age");
+        //return cacheableResponse.hasHeader("Age"); //This produces FP.... having age with a value 0 is bad
+
+        if (cacheableResponse.hasHeader("Age")) {
+            if (!cacheableResponse.headerValue("Age").equals("0")) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
     }
 
 
