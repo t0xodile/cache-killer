@@ -147,6 +147,7 @@ public class Server {
         if (cacheCount==0) return null;
 
         for (String delim : delimiters) {
+            if (!warmCache(baseReqResp.request(), cacheCount)) return null;
             HttpRequestResponse testReqResp = sendHTTP1Request(withRawPath(baseReqResp.request(), baseReqResp.request().path() + delim + randomNonce(9)));
             if (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp)) {
                 out.add(delim);
@@ -249,38 +250,49 @@ public class Server {
         int cacheCount = isCachedResponse(baseReqResp);
         if (cacheCount==0) return null;
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(request.withPath("/."+request.path()));
         out[SINGLE_DOT] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(request.withPath("/aaa/.."+request.path()));
         out[DOT_SEGMENT] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(request.withPath("/aaa\\.."+request.path()));
         out[BACKSLASH_DOT_SEGMENT] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(request.withPath("///"+request.path()));
         out[MULTI_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
         if (multiSegment) {
+            if (!warmCache(request, cacheCount)) return null;
             testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "\\")));
             out[BACK_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+            if (!warmCache(request, cacheCount)) return null;
             testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "%2f")));
             out[ENCODED_SLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+            if (!warmCache(request, cacheCount)) return null;
             testReqResp = sendHTTP1Request(request.withPath("/"+request.path().substring(1).replace("/", "%5c")));
             out[ENCODED_BACKSLASH] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
         }
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(request.withPath("/aaa%2f.."+request.path()));
         out[ENCODED_SEGMENT] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(request.withPath("/aaa%5c.."+request.path()));
         out[ENCODED_BACK_SEGMENT] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(request.withPath("/"+URLencode(request.path().substring(1))));
         out[PATH_DECODING] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
+        if (!warmCache(request, cacheCount)) return null;
         testReqResp = sendHTTP1Request(addCacheBuster(request));
         out[IS_QUERY_KEYED] = (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp));
 
@@ -331,6 +343,11 @@ public class Server {
         return false;
     }
 
+
+    private static boolean warmCache(HttpRequest request, int expectedCacheCount) {
+        HttpRequestResponse warmResp = sendHTTP1Request(request);
+        return warmResp.hasResponse() && getCacheHits(warmResp) == expectedCacheCount;
+    }
 
     public static int isCachedResponse(HttpRequestResponse reqResp){
         int cacheCount = getCacheHits(reqResp);
