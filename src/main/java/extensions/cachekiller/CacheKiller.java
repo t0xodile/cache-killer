@@ -154,6 +154,11 @@ public class CacheKiller implements ContextMenuItemsProvider {
         detectKeyDelimitersOptionPanel.add(detectKeyDelimitersCheckbox);
         mainPanel.add(detectKeyDelimitersOptionPanel);
 
+        // Use HTTP/2 Option
+        JCheckBox useHTTP2Checkbox = new JCheckBox("Use HTTP/2");
+        JPanel useHTTP2OptionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        useHTTP2OptionPanel.add(useHTTP2Checkbox);
+        mainPanel.add(useHTTP2OptionPanel);
 
         // Start Button
         JButton startButton = new JButton("Start");
@@ -181,7 +186,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
             }
             try {
                 launchBulkScan(requestResponse, "DelimiterScan", hostRequests ->
-                        new DelimiterScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), detectKeyDelimitersCheckbox.isSelected()));
+                        new DelimiterScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), detectKeyDelimitersCheckbox.isSelected(), useHTTP2Checkbox.isSelected()));
             } catch (Throwable t) {
                 api.logging().logToOutput("ERROR: Failed to start delimiter scan - " + t.getClass().getName() + ": " + t.getMessage());
             }
@@ -349,6 +354,12 @@ public class CacheKiller implements ContextMenuItemsProvider {
         reportDetectionResultsOptionPanel.add(reportDetectionResultsCheckbox);
         mainPanel.add(reportDetectionResultsOptionPanel);
 
+        // Use HTTP/2 Option
+        JCheckBox useHTTP2DeceptionCheckbox = new JCheckBox("Use HTTP/2");
+        JPanel useHTTP2DeceptionOptionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        useHTTP2DeceptionOptionPanel.add(useHTTP2DeceptionCheckbox);
+        mainPanel.add(useHTTP2DeceptionOptionPanel);
+
         // Start Button
         JButton startButton = new JButton("Start");
         startButton.addActionListener(e -> {
@@ -457,7 +468,7 @@ public class CacheKiller implements ContextMenuItemsProvider {
             }
             try {
                 launchBulkScan(requestResponse, "CacheDeceptionScan", hostRequests ->
-                        new CacheDeceptionScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), extensionsList, staticDirectories, reportDetectionResultsCheckbox.isSelected()));
+                        new CacheDeceptionScanWorker(api, hostRequests, testDelimitersList, fullSitemapScanCheckbox.isSelected(), detectSubHostDelimitersCheckbox.isSelected(), extensionsList, staticDirectories, reportDetectionResultsCheckbox.isSelected(), useHTTP2DeceptionCheckbox.isSelected()));
             } catch (Throwable t) {
                 api.logging().logToOutput("ERROR: Failed to start cache deception scan - " + t.getClass().getName() + ": " + t.getMessage());
             }

@@ -103,15 +103,19 @@ public class Server {
 
 
     public static ArrayList<String> detectOriginDelimiters(HttpRequestResponse baseReqResp, List<String> delimiters){
+        return detectOriginDelimiters(baseReqResp, delimiters, HttpMode.HTTP_1);
+    }
+
+    public static ArrayList<String> detectOriginDelimiters(HttpRequestResponse baseReqResp, List<String> delimiters, HttpMode mode){
         //For better results use a non-cacheable request/response
         ArrayList<String> out = new ArrayList<>();
         if (!baseReqResp.hasResponse() || baseReqResp.response().statusCode()==0 || baseReqResp.response().statusCode()>=400) return null;
-        HttpRequestResponse notfound = sendHTTP1Request(baseReqResp.request().withPath(baseReqResp.request().pathWithoutQuery()+randomNonce(9)+getQuery(baseReqResp.request())));
+        HttpRequestResponse notfound = sendRequest(baseReqResp.request().withPath(baseReqResp.request().pathWithoutQuery()+randomNonce(9)+getQuery(baseReqResp.request())), mode);
         if (!notfound.hasResponse() || notfound.response().statusCode()==0) return null;
         if (baseReqResp.response().statusCode() == notfound.response().statusCode()) return null;
 
         for (String delim : delimiters) {
-            HttpRequestResponse testReqResp = sendHTTP1Request(withRawPath(baseReqResp.request(), baseReqResp.request().pathWithoutQuery() + delim + randomNonce(9) + getQuery(baseReqResp.request())));
+            HttpRequestResponse testReqResp = sendRequest(withRawPath(baseReqResp.request(), baseReqResp.request().pathWithoutQuery() + delim + randomNonce(9) + getQuery(baseReqResp.request())), mode);
             if (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response())) {
                 out.add(delim);
             }
@@ -120,15 +124,19 @@ public class Server {
     }
 
     public HttpRequestResponse detectOriginDelimiters(List<String> delimiters){
+        return detectOriginDelimiters(delimiters, HttpMode.HTTP_1);
+    }
+
+    public HttpRequestResponse detectOriginDelimiters(List<String> delimiters, HttpMode mode){
         for (HttpRequestResponse reqResp : this.dynamicReqs){
-            List<String> originDelimiters = detectOriginDelimiters(reqResp, delimiters);
+            List<String> originDelimiters = detectOriginDelimiters(reqResp, delimiters, mode);
             if (originDelimiters != null) {
                 this.originDelimiters = originDelimiters;
                 return reqResp;
             }
         }
         for (HttpRequestResponse reqResp : this.staticReqs){
-            List<String> originDelimiters = detectOriginDelimiters(reqResp, delimiters);
+            List<String> originDelimiters = detectOriginDelimiters(reqResp, delimiters, mode);
             if (originDelimiters != null) {
                 this.originDelimiters = originDelimiters;
                 return reqResp;
@@ -139,6 +147,10 @@ public class Server {
 
 
     public ArrayList<String> detectKeyDelimiters(HttpRequestResponse baseReqResp, List<String> delimiters){
+        return detectKeyDelimiters(baseReqResp, delimiters, HttpMode.HTTP_1);
+    }
+
+    public ArrayList<String> detectKeyDelimiters(HttpRequestResponse baseReqResp, List<String> delimiters, HttpMode mode){
         ArrayList<String> out = new ArrayList<>();
         if (baseReqResp.request().path().contains("?")) return null;
         if (!baseReqResp.hasResponse() || baseReqResp.response().statusCode()==0 ) return null;
@@ -148,7 +160,7 @@ public class Server {
 
         for (String delim : delimiters) {
             if (!warmCache(baseReqResp.request(), cacheCount)) return null;
-            HttpRequestResponse testReqResp = sendHTTP1Request(withRawPath(baseReqResp.request(), baseReqResp.request().path() + delim + randomNonce(9)));
+            HttpRequestResponse testReqResp = sendRequest(withRawPath(baseReqResp.request(), baseReqResp.request().path() + delim + randomNonce(9)), mode);
             if (testReqResp.hasResponse() && compareResp(baseReqResp.response(), testReqResp.response()) && cacheCount == getCacheHits(testReqResp)) {
                 out.add(delim);
             }
@@ -158,9 +170,13 @@ public class Server {
     }
 
     public HttpRequestResponse detectKeyDelimiters(List<String> delimiters){
+        return detectKeyDelimiters(delimiters, HttpMode.HTTP_1);
+    }
+
+    public HttpRequestResponse detectKeyDelimiters(List<String> delimiters, HttpMode mode){
         for (HttpRequestResponse reqResp : this.staticReqs){
-            HttpRequestResponse testReqResp = sendHTTP1Request(reqResp.request());
-            List<String> keyDelimiters = detectKeyDelimiters(testReqResp, delimiters);
+            HttpRequestResponse testReqResp = sendRequest(reqResp.request(), mode);
+            List<String> keyDelimiters = detectKeyDelimiters(testReqResp, delimiters, mode);
             if (keyDelimiters != null) {
                 this.keyDelimiters = keyDelimiters;
                 return reqResp;
@@ -585,6 +601,21 @@ public class Server {
             modifiedRequest = HttpRequest.httpRequest(ByteArray.byteArray(modifiedRequestBytes));
         }
         return api.http().sendRequest(modifiedRequest.withService(req.httpService()), RequestOptions.requestOptions().withHttpMode(HttpMode.HTTP_1));
+    }
+
+    public static HttpRequestResponse sendRequest(HttpRequest req, HttpMode mode){
+        if (mode == HttpMode.HTTP_1) {
+            return sendHTTP1Request(req);
+        }
+        HttpRequest modifiedRequest = req;
+        if (req.httpVersion().equals("HTTP/1.1")) {
+            byte[] requestBytes = req.toByteArray().getBytes();
+            String requestString = new String(requestBytes, StandardCharsets.ISO_8859_1);
+            requestString = requestString.replace("HTTP/1.1", "HTTP/2");
+            byte[] modifiedRequestBytes = requestString.getBytes(StandardCharsets.ISO_8859_1);
+            modifiedRequest = HttpRequest.httpRequest(ByteArray.byteArray(modifiedRequestBytes));
+        }
+        return api.http().sendRequest(modifiedRequest.withService(req.httpService()), RequestOptions.requestOptions().withHttpMode(mode));
     }
 
     public static void setApi(MontoyaApi api){

@@ -1,10 +1,12 @@
 package extensions.cachekiller.Workers;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.HttpMode;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
+import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 import extensions.cachekiller.Utils.Server;
 
@@ -15,20 +17,25 @@ import static extensions.cachekiller.Utils.Server.*;
 
 public class CacheDeceptionScanWorker extends ScanWorker {
 
+    record DetectionResult(HttpRequestResponse initialRequest, HttpRequestResponse cachedResponse,
+                           boolean isFallback, String headerDiff) {}
+
     private final List<String> testDelimitersList;
     private final List<String> extensions;
     private List<String> staticDirs;
     private final boolean reportDetectionResults;
+    private final HttpMode mode;
     public static final List<Character> BROWSER_ENCODED = new ArrayList<>(Arrays.asList('"', '^', '{', '}', '`','|','<','>','#','\\'));
 
 
-    public CacheDeceptionScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, List<String> testDelimitersList, boolean fullSiteMap, boolean subHosts, List<String> extensions, List<String> staticDirs, boolean reportDetectionResults){
+    public CacheDeceptionScanWorker(MontoyaApi api, List<HttpRequestResponse> requestResponse, List<String> testDelimitersList, boolean fullSiteMap, boolean subHosts, List<String> extensions, List<String> staticDirs, boolean reportDetectionResults, boolean useHTTP2){
         super(api, requestResponse, fullSiteMap, subHosts);
         this.extensions = new ArrayList<>(extensions);
         if (staticDirs == null) this.staticDirs = null;
         else this.staticDirs = new ArrayList<>(staticDirs);
         this.testDelimitersList = new ArrayList<>(testDelimitersList);
         this.reportDetectionResults = reportDetectionResults;
+        this.mode = useHTTP2 ? HttpMode.HTTP_2 : HttpMode.HTTP_1;
     }
 
     public void scan(){
@@ -43,8 +50,8 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 api.logging().logToOutput("[CacheDeceptionScan] Skipping server group: no dynamic (non-cached) requests found. All selected requests appear to already be cached.");
                 continue;
             }
-            HttpRequestResponse originDelimReportReq = serv.detectOriginDelimiters(testDelimitersList);
-            HttpRequestResponse keyDelimReportReq = serv.detectKeyDelimiters(testDelimitersList);
+            HttpRequestResponse originDelimReportReq = serv.detectOriginDelimiters(testDelimitersList, mode);
+            HttpRequestResponse keyDelimReportReq = serv.detectKeyDelimiters(testDelimitersList, mode);
             HttpRequestResponse originNormReportReq = serv.detectOriginNormalization();
             HttpRequestResponse keyNormReportReq = serv.detectKeyNormalization();
 
@@ -124,11 +131,16 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                         discrepancyOriginDelimiters.add(delim);
                     }
                 }
-                List<HttpRequestResponse[]> vulnerableExtension;
                 for (String delim : discrepancyOriginDelimiters) {
-                    vulnerableExtension = testExtensionRule(serv, delim, this.extensions);
-                    for (HttpRequestResponse[] vuln : vulnerableExtension) {
-                        reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '" + ScanWorker.printableStr(delim) + "' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.", AuditIssueSeverity.HIGH, vuln[0], vuln[1]);
+                    List<DetectionResult> vulnerableExtension = testExtensionRule(serv, delim, this.extensions);
+                    for (DetectionResult vuln : vulnerableExtension) {
+                        String desc = "The target appears to be vulnerable to Web Cache Deception using the Delimiter: '" + ScanWorker.printableStr(delim) + "' and the Static Extensions rule<br><br>If the response contains sensitive information this could be used to hijack victim's data.";
+                        AuditIssueConfidence confidence = AuditIssueConfidence.CERTAIN;
+                        if (vuln.isFallback()) {
+                            desc += vuln.headerDiff();
+                            confidence = AuditIssueConfidence.TENTATIVE;
+                        }
+                        reportIssue("Web Cache Deception", desc, AuditIssueSeverity.HIGH, confidence, vuln.initialRequest(), vuln.cachedResponse());
                     }
                 }
             }
@@ -158,10 +170,16 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                                 sb.append("..%2F");
                             }
                             sb.append(dir.startsWith("/") ? dir.substring(1) : dir);
-                            HttpRequestResponse testReq = sendHTTP1Request(withRawPath(reqResp.request(), sb.toString()));
-                            HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
-                            if (cachedResp != null){
-                                reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Cache Key Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                            HttpRequestResponse testReq = sendRequest(withRawPath(reqResp.request(), sb.toString()), mode);
+                            DetectionResult result = detectCacheDeception(testReq, reqResp);
+                            if (result != null){
+                                String desc = "The target appears to be vulnerable to Web Cache Deception with Cache Key Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.";
+                                AuditIssueConfidence confidence = AuditIssueConfidence.CERTAIN;
+                                if (result.isFallback()) {
+                                    desc += result.headerDiff();
+                                    confidence = AuditIssueConfidence.TENTATIVE;
+                                }
+                                reportIssue("Web Cache Deception", desc, AuditIssueSeverity.HIGH, confidence, testReq, result.cachedResponse());
                             }
                         }
                     }
@@ -183,10 +201,16 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                                 sb.append("..%5C");
                             }
                             sb.append(dir.startsWith("/") ? dir.substring(1) : dir);
-                            HttpRequestResponse testReq = sendHTTP1Request(withRawPath(reqResp.request(), sb.toString()));
-                            HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
-                            if (cachedResp != null){
-                                reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Cache Key Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                            HttpRequestResponse testReq = sendRequest(withRawPath(reqResp.request(), sb.toString()), mode);
+                            DetectionResult result = detectCacheDeception(testReq, reqResp);
+                            if (result != null){
+                                String desc = "The target appears to be vulnerable to Web Cache Deception with Cache Key Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.<br>The Origin Delimiter used is: '"+ScanWorker.printableStr(delimiter)+"'.";
+                                AuditIssueConfidence confidence = AuditIssueConfidence.CERTAIN;
+                                if (result.isFallback()) {
+                                    desc += result.headerDiff();
+                                    confidence = AuditIssueConfidence.TENTATIVE;
+                                }
+                                reportIssue("Web Cache Deception", desc, AuditIssueSeverity.HIGH, confidence, testReq, result.cachedResponse());
                             }
                         }
                     }
@@ -205,10 +229,16 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                             sb.append("..%2F");
                         }
                         sb.append(reqResp.request().path().substring(1));
-                        HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
-                        HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
-                        if (cachedResp != null){
-                            reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Origin Server Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                        HttpRequestResponse testReq = sendRequest(reqResp.request().withPath(sb.toString()), mode);
+                        DetectionResult result = detectCacheDeception(testReq, reqResp);
+                        if (result != null){
+                            String desc = "The target appears to be vulnerable to Web Cache Deception with Origin Server Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.";
+                            AuditIssueConfidence confidence = AuditIssueConfidence.CERTAIN;
+                            if (result.isFallback()) {
+                                desc += result.headerDiff();
+                                confidence = AuditIssueConfidence.TENTATIVE;
+                            }
+                            reportIssue("Web Cache Deception", desc, AuditIssueSeverity.HIGH, confidence, testReq, result.cachedResponse());
                         }
                     }
                 }
@@ -226,10 +256,16 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                             sb.append("..%5C");
                         }
                         sb.append(reqResp.request().path().substring(1));
-                        HttpRequestResponse testReq = sendHTTP1Request(reqResp.request().withPath(sb.toString()));
-                        HttpRequestResponse cachedResp = detectCacheDeception(testReq, reqResp);
-                        if (cachedResp != null){
-                            reportIssue("Web Cache Deception", "The target appears to be vulnerable to Web Cache Deception with Origin Server Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.", AuditIssueSeverity.HIGH, testReq, cachedResp);
+                        HttpRequestResponse testReq = sendRequest(reqResp.request().withPath(sb.toString()), mode);
+                        DetectionResult result = detectCacheDeception(testReq, reqResp);
+                        if (result != null){
+                            String desc = "The target appears to be vulnerable to Web Cache Deception with Origin Server Backslash Normalization.<br>The path : '"+dir+"' appears to be a Static Directory.";
+                            AuditIssueConfidence confidence = AuditIssueConfidence.CERTAIN;
+                            if (result.isFallback()) {
+                                desc += result.headerDiff();
+                                confidence = AuditIssueConfidence.TENTATIVE;
+                            }
+                            reportIssue("Web Cache Deception", desc, AuditIssueSeverity.HIGH, confidence, testReq, result.cachedResponse());
                         }
                     }
                 }
@@ -239,17 +275,19 @@ public class CacheDeceptionScanWorker extends ScanWorker {
     }
 
 
-    public List<HttpRequestResponse[]> testExtensionRule(Server server, String delimiter, List<String> extensions){
-        List<HttpRequestResponse[]> out = new ArrayList<>();
+    public List<DetectionResult> testExtensionRule(Server server, String delimiter, List<String> extensions){
+        List<DetectionResult> out = new ArrayList<>();
         for (HttpRequestResponse reqResp : server.getDynamicRequest()) {
-            HttpRequestResponse testReq = sendHTTP1Request(setRawPathSuffix(reqResp.request(), delimiter+(delimiter.equals(".") ? ".": "")+"aaaaa"));
+            HttpRequestResponse testReq = sendRequest(setRawPathSuffix(reqResp.request(), delimiter+(delimiter.equals(".") ? ".": "")+"aaaaa"), mode);
             if (testReq.hasResponse() && testReq.response().statusCode() != 0 && compareResp(testReq.response(), reqResp.response())) {
                 for (String ext : extensions) {
-                    HttpRequestResponse initialReq = sendHTTP1Request(setRawPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "" : ".") + ext));
+                    HttpRequestResponse initialReq = sendRequest(setRawPathSuffix(reqResp.request(), delimiter + (delimiter.equals(".") ? "" : ".") + ext), mode);
                     boolean cached = triggerCache(initialReq.request());
-                    HttpRequestResponse cachedReq = sendHTTP1Request(initialReq.request());
-                    if (cached || !containSameCacheHeaders(cachedReq, reqResp)) {
-                        out.add(new HttpRequestResponse[]{initialReq, cachedReq});
+                    HttpRequestResponse cachedReq = sendRequest(initialReq.request(), mode);
+                    if (cached) {
+                        out.add(new DetectionResult(initialReq, cachedReq, false, null));
+                    } else if (!containSameCacheHeaders(cachedReq, reqResp)) {
+                        out.add(new DetectionResult(initialReq, cachedReq, true, buildCacheHeaderDiff(cachedReq, reqResp)));
                     }
                 }
             }
@@ -257,12 +295,15 @@ public class CacheDeceptionScanWorker extends ScanWorker {
         return out;
     }
 
-    public HttpRequestResponse detectCacheDeception(HttpRequestResponse testReq, HttpRequestResponse baseReqResp){
+    public DetectionResult detectCacheDeception(HttpRequestResponse testReq, HttpRequestResponse baseReqResp){
         if (testReq.hasResponse() && testReq.response().statusCode() != 0 && compareResp(testReq.response(), baseReqResp.response())) {
             boolean cached = triggerCache(testReq.request());
-            HttpRequestResponse cachedResp = sendHTTP1Request(testReq.request());
-            if (cached || !containSameCacheHeaders(cachedResp, baseReqResp)) {
-                return cachedResp;
+            HttpRequestResponse cachedResp = sendRequest(testReq.request(), mode);
+            if (cached) {
+                return new DetectionResult(null, cachedResp, false, null);
+            }
+            if (!containSameCacheHeaders(cachedResp, baseReqResp)) {
+                return new DetectionResult(null, cachedResp, true, buildCacheHeaderDiff(cachedResp, baseReqResp));
             }
         }
         return null;
@@ -271,14 +312,14 @@ public class CacheDeceptionScanWorker extends ScanWorker {
 
     public boolean triggerCache(HttpRequest request){
         boolean done = false;
-        HttpRequestResponse testGet = sendHTTP1Request(request);
+        HttpRequestResponse testGet = sendRequest(request, mode);
         if (testGet.hasResponse() && hasCacheHit(testGet.response())) done = true;
         if (!done) {
             try {
                 TimeUnit.SECONDS.sleep(1);
             } catch (InterruptedException ignored) {
             }
-            testGet = sendHTTP1Request(testGet.request());
+            testGet = sendRequest(testGet.request(), mode);
             if (testGet.hasResponse() && hasCacheHit(testGet.response())) done = true;
         }
         if (!done) {
@@ -286,7 +327,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 TimeUnit.SECONDS.sleep(1);
             } catch (InterruptedException ignored) {
             }
-            testGet = sendHTTP1Request(testGet.request());
+            testGet = sendRequest(testGet.request(), mode);
             if (testGet.hasResponse() && hasCacheHit(testGet.response())) done = true;
         }
         int retries = 0;
@@ -295,7 +336,7 @@ public class CacheDeceptionScanWorker extends ScanWorker {
                 TimeUnit.SECONDS.sleep(2);
             } catch (InterruptedException ignored) {
             }
-            testGet = sendHTTP1Request(testGet.request());
+            testGet = sendRequest(testGet.request(), mode);
             if (testGet.hasResponse() && hasCacheHit(testGet.response())) done = true;
             retries++;
         }
@@ -348,6 +389,35 @@ public class CacheDeceptionScanWorker extends ScanWorker {
             if (!h1.get(name).equals(h2.get(name))) return false;
         }
         return true;
+    }
+
+    private String buildCacheHeaderDiff(HttpRequestResponse testResponse, HttpRequestResponse baseResponse) {
+        Map<String, String> testHeaders = getCacheHeaders(testResponse.response());
+        Map<String, String> baseHeaders = getCacheHeaders(baseResponse.response());
+
+        Set<String> allKeys = new LinkedHashSet<>();
+        allKeys.addAll(testHeaders.keySet());
+        allKeys.addAll(baseHeaders.keySet());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<br><br><b>Cache header differences (tentative detection):</b><br>");
+        sb.append("<table><tr><th>Header</th><th>Test Response</th><th>Baseline Response</th></tr>");
+        for (String key : allKeys) {
+            String testVal = testHeaders.getOrDefault(key, "(absent)");
+            String baseVal = baseHeaders.getOrDefault(key, "(absent)");
+            if (!testVal.equals(baseVal)) {
+                sb.append("<tr><td>").append(escapeHtml(key)).append("</td>");
+                sb.append("<td>").append(escapeHtml(testVal)).append("</td>");
+                sb.append("<td>").append(escapeHtml(baseVal)).append("</td></tr>");
+            }
+        }
+        sb.append("</table>");
+        return sb.toString();
+    }
+
+    private static String escapeHtml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     public static boolean compareResp(HttpResponse r1, HttpResponse r2){

@@ -134,13 +134,17 @@ public abstract class ScanWorker extends SwingWorker<Void, Void> {
     }
 
     public void reportIssue(String title, String description, AuditIssueSeverity severity, HttpRequestResponse... requestResponses) {
+        reportIssue(title, description, severity, AuditIssueConfidence.CERTAIN, requestResponses);
+    }
+
+    public void reportIssue(String title, String description, AuditIssueSeverity severity, AuditIssueConfidence confidence, HttpRequestResponse... requestResponses) {
         AuditIssue issue = auditIssue(
                 title,
                 description,
                 null,
                 requestResponses[0].request().url(),
                 severity,
-                AuditIssueConfidence.CERTAIN,
+                confidence,
                 null,
                 null,
                 AuditIssueSeverity.INFORMATION,
